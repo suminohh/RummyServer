@@ -1,5 +1,6 @@
 const url = require("url");
 const http = require("http");
+const Deck = require("./deck");
 
 var args = process.argv.slice(2);
 const DEBUG = args.length > 0 && args[0] === "debug";
@@ -34,7 +35,9 @@ const app = http.createServer(function(req, res) {
 
     switch (urlArray[0]) {
       case "createGame":
-        res.write(`done`);
+        const deck = new Deck();
+        deck.shuffle();
+        res.write(JSON.stringify(deck.cards));
         break;
       case "joinGame":
         res.write(`done`);
@@ -59,6 +62,7 @@ const app = http.createServer(function(req, res) {
         res.write("Not found");
     }
   } catch (err) {
+    log(err);
     res.writeHead(404, { "Content-Type": "text/html" });
     res.write("Malformed Request");
   }
