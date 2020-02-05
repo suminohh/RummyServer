@@ -2,12 +2,43 @@ const url = require("url");
 const http = require("http");
 const Deck = require("./deck");
 
+var admin = require("firebase-admin");
+
+var serviceAccount = require("./rummysite_creds.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: "https://rummysite-e9ddf.firebaseio.com"
+});
+
+// var db = admin.database();
+var query = admin
+  .firestore()
+  .collection("games")
+  .limit(10);
+
 var args = process.argv.slice(2);
 const DEBUG = args.length > 0 && args[0] === "debug";
 
 const log = message => {
   DEBUG && console.log(message);
 };
+
+// Start listening to the query.
+query.onSnapshot(function(snapshot) {
+  snapshot.docChanges().forEach(function(change) {
+    if (change.type === "removed") {
+      log("removed");
+    } else {
+      var game = change.doc.data();
+      log("game");
+      log(change.doc.id);
+      game.player1.get().then(res => log(res.data().user_id));
+      game.player2.get().then(res => log(res.data().user_id));
+      game.deck.get().then(res => log(res.data().cards));
+    }
+  });
+});
 
 const getUrlArray = url => {
   var urlArray = url.split("/");

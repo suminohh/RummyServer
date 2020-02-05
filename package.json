@@ -9,7 +9,9 @@
   },
   "author": "",
   "license": "ISC",
-  "dependencies": {},
+  "dependencies": {
+    "firebase-admin": "^8.9.2"
+  },
   "devDependencies": {
     "nodemon": "^2.0.2"
   }
