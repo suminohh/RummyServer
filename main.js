@@ -1,21 +1,9 @@
 const url = require("url");
 const http = require("http");
-const Deck = require("./deck");
+const Test = require("./test");
 
-var admin = require("firebase-admin");
-
-var serviceAccount = require("./rummysite_creds.json");
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://rummysite-e9ddf.firebaseio.com"
-});
-
-// var db = admin.database();
-var query = admin
-  .firestore()
-  .collection("games")
-  .limit(10);
+// const test = new Test();
+// test.testCreateDeck();
 
 var args = process.argv.slice(2);
 const DEBUG = args.length > 0 && args[0] === "debug";
@@ -23,22 +11,6 @@ const DEBUG = args.length > 0 && args[0] === "debug";
 const log = message => {
   DEBUG && console.log(message);
 };
-
-// Start listening to the query.
-query.onSnapshot(function(snapshot) {
-  snapshot.docChanges().forEach(function(change) {
-    if (change.type === "removed") {
-      log("removed");
-    } else {
-      var game = change.doc.data();
-      log("game");
-      log(change.doc.id);
-      game.player1.get().then(res => log(res.data().user_id));
-      game.player2.get().then(res => log(res.data().user_id));
-      game.deck.get().then(res => log(res.data().cards));
-    }
-  });
-});
 
 const getUrlArray = url => {
   var urlArray = url.split("/");
@@ -52,8 +24,8 @@ const getUrlArray = url => {
 const createGameHandler = (res, userID) => {
   res.write(`createGame - userID: ${userID}`);
 };
-const joinGameHandler = (res, userID) => {
-  res.write(`joinGame - userID: ${userID}`);
+const joinGameHandler = (res, userID, gameID) => {
+  res.write(`joinGame - userID: ${userID}, gameID: ${gameID}`);
 };
 const pickupDeckHandler = (res, userID) => {
   res.write(`pickupDeck - userID: ${userID}`);
@@ -110,6 +82,10 @@ const app = http.createServer(function(req, res) {
         createGameHandler(res, userID);
         break;
       case "joinGame":
+        var gameID = headers["game_id"];
+        if (!gameID) {
+          throw new Error("No game ID");
+        }
         joinGameHandler(res, userID);
         break;
       case "pickupDeck":
