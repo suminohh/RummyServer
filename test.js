@@ -1,10 +1,13 @@
 const RummyDatabase = require("./rummyDatabase");
 
 module.exports = class Test {
+  gameID = "5EuSdmXGtiMxu8jQgXFr"; // may break if game is deleted from games collection
+  player1ID = "hZMMwESSYVrmRieHFCKO"; // may break if user is deleted from users collection
+  player2ID = "mOxzCgLN55kEJOtGxSqd"; // may break if user is deleted from users collection
   testUpdateGame = () => {
     var rd = new RummyDatabase();
 
-    var game = rd.getGameRef("9yCQ5VklFNt7E9Sy28k1");
+    var game = rd.getGameRef(this.gameID);
 
     game.get().then(docresp => {
       var game = docresp.data();
@@ -14,8 +17,8 @@ module.exports = class Test {
       game.deck.get().then(res => console.log(res.data().cards));
     });
 
-    var p1 = rd.getUserRef("hZMMwESSYVrmRieHFCKO");
-    var p2 = rd.getUserRef("mOxzCgLN55kEJOtGxSqd");
+    var p1 = rd.getUserRef(this.player1ID);
+    var p2 = rd.getUserRef(this.player2ID);
 
     game.update("player2", p2);
     game.update("player1", p1);
@@ -29,17 +32,35 @@ module.exports = class Test {
     });
   };
 
-  testCreateDeck = () => {
+  testCreateGame = () => {
     var rd = new RummyDatabase();
-    const deckprom = rd.createDeck();
-    deckprom.then(deckref => {
-      deckref.get().then(docresp => {
-        var deck = docresp.data();
-        console.log("deck:");
-        console.log(deckref.id);
-        console.log(deck.cards);
-        console.log(deck.cards_used);
-      });
+    rd.createGame(this.player1ID);
+  };
+
+  testAddSet = () => {
+    var rd = new RummyDatabase();
+    var gameref = rd.getGameRef(this.gameID);
+    gameref.get().then(gameresp => {
+      var userRef = gameresp.data().player1;
+      gameref
+        .collection("sets")
+        .add({
+          cards: ["King of Spades", "King of Clubs", "King of Hearts"],
+          player: userRef,
+          continued_from: null
+        })
+        .then(setref => {
+          gameref.collection("sets").add({
+            cards: ["King of Diamonds"],
+            player: userRef,
+            continued_from: setref
+          });
+        });
     });
+  };
+
+  testJoinGame = () => {
+    var rd = new RummyDatabase();
+    rd.joinGame(this.player2ID, this.gameID);
   };
 };
