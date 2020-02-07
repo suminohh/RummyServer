@@ -1,6 +1,9 @@
 const url = require("url");
 const http = require("http");
 const Test = require("./test");
+const RummyDatabase = require("./rummyDatabase");
+
+var rd = new RummyDatabase();
 
 // const test = new Test();
 // test.testCreateAndJoinGame();
@@ -22,18 +25,26 @@ const getUrlArray = url => {
 };
 
 const createGameHandler = (res, userID) => {
-  res.write(`createGame - userID: ${userID}`);
+  rd.createGame(userID).then(gameID => {
+    res.write(gameID);
+    res.end();
+  });
 };
 const joinGameHandler = (res, userID, gameID) => {
-  res.write(`joinGame - userID: ${userID}, gameID: ${gameID}`);
+  rd.joinGame(userID, gameID).then(message => {
+    res.write(message);
+    res.end();
+  });
 };
 const pickupDeckHandler = (res, userID) => {
   res.write(`pickupDeck - userID: ${userID}`);
+  res.end();
 };
 const pickupDiscardHandler = (res, userID, discardPickupIndex) => {
   res.write(
     `pickupDiscard - userID: ${userID}, discardPickupIndex: ${discardPickupIndex}`
   );
+  res.end();
 };
 const playCardsHandler = (res, userID, cards, continuedSetID) => {
   res.write(
@@ -41,12 +52,15 @@ const playCardsHandler = (res, userID, cards, continuedSetID) => {
       cards
     )}, continuedSetID: ${continuedSetID}`
   );
+  res.end();
 };
 const discardHandler = (res, userID, discardCard) => {
   res.write(`discard - userID: ${userID}, discardCard: ${discardCard}`);
+  res.end();
 };
 const rummyHandler = (res, userID) => {
   res.write(`rummy - userID: ${userID}`);
+  res.end();
 };
 
 // Create a server object
@@ -82,11 +96,12 @@ const app = http.createServer(function(req, res) {
         createGameHandler(res, userID);
         break;
       case "joinGame":
+        // TODO: Grab gameID from url params not header
         var gameID = headers["game_id"];
         if (!gameID) {
           throw new Error("No game ID");
         }
-        joinGameHandler(res, userID);
+        joinGameHandler(res, userID, gameID);
         break;
       case "pickupDeck":
         pickupDeckHandler(res, userID);
@@ -124,9 +139,8 @@ const app = http.createServer(function(req, res) {
     log(err);
     res.writeHead(404, { "Content-Type": "text/html" });
     res.write(`Malformed Request: ${err.message}`);
+    res.end();
   }
-
-  res.end();
 });
 
 app.listen(3000, function() {

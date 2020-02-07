@@ -62,6 +62,7 @@ module.exports = class RummyDatabase {
     var returnMessage;
     const userRef = this.getUserRef(userID);
     const gameRef = this.getGameRef(gameID);
+    // TODO: fail if player2 is already set
     await gameRef.update({ player2: userRef }).then(async _ => {
       await gameRef
         .collection("hands")
