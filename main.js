@@ -3,7 +3,7 @@ const http = require("http");
 const Test = require("./test");
 
 // const test = new Test();
-// test.testJoinGame();
+// test.testCreateAndJoinGame();
 
 var args = process.argv.slice(2);
 const DEBUG = args.length > 0 && args[0] === "debug";

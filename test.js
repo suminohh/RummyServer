@@ -1,9 +1,10 @@
 const RummyDatabase = require("./rummyDatabase");
 
 module.exports = class Test {
-  gameID = "5EuSdmXGtiMxu8jQgXFr"; // may break if game is deleted from games collection
+  gameID = "oOVUkVzH6yatiH7pQ7RS"; // may break if game is deleted from games collection
   player1ID = "hZMMwESSYVrmRieHFCKO"; // may break if user is deleted from users collection
   player2ID = "mOxzCgLN55kEJOtGxSqd"; // may break if user is deleted from users collection
+
   testUpdateGame = () => {
     var rd = new RummyDatabase();
 
@@ -29,6 +30,15 @@ module.exports = class Test {
       game.player1.get().then(res => console.log(res.data().user_id));
       game.player2.get().then(res => console.log(res.data().user_id));
       game.deck.get().then(res => console.log(res.data().cards));
+    });
+  };
+
+  testCreateAndJoinGame = () => {
+    var rd = new RummyDatabase();
+    rd.createGame(this.player1ID).then(gameID => {
+      rd.joinGame(this.player2ID, gameID).then(message => {
+        console.log(message);
+      });
     });
   };
 
