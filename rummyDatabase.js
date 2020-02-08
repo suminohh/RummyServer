@@ -23,11 +23,27 @@ module.exports = class RummyDatabase {
     return querySnapshot.docs[0].ref;
   };
 
+  createDeck = async gameRef => {
+    const deck = new Deck();
+    deck.shuffle();
+    await gameRef
+      .collection("deck")
+      .add({ cards: deck.cards, cards_used: deck.cardsUsed });
+  };
+
   getDeckRef = async gameRef => {
     var querySnapshot = await gameRef.collection("deck").get();
     var deckQueryDocumentSnapshot = querySnapshot.docs[0];
     return deckQueryDocumentSnapshot.ref;
   };
+
+  getDeckDoc = async gameRef => {
+    var deckRef = await this.getDeckRef(gameRef);
+    return await deckRef.get();
+  };
+
+  createHand = async (gameRef, userRef) =>
+    await gameRef.collection("hands").add({ player: userRef, cards: [] });
 
   getHandsRefs = async gameRef => {
     var querySnapshot = await gameRef.collection("hands").get();
@@ -41,12 +57,8 @@ module.exports = class RummyDatabase {
       .collection("games")
       .add({ player1: userRef, turn: userRef });
     gameID = gameRef.id;
-    const deck = new Deck();
-    deck.shuffle();
-    gameRef
-      .collection("deck")
-      .add({ cards: deck.cards, cards_used: deck.cardsUsed });
-    gameRef.collection("hands").add({ player: userRef, cards: [] });
+    this.createDeck(gameRef);
+    this.createHand(gameRef, userRef);
     return gameID;
   };
 
@@ -127,4 +139,6 @@ module.exports = class RummyDatabase {
     });
     return returnMessage;
   };
+
+  playCards = async (userID, gameID, cards) => {};
 };
