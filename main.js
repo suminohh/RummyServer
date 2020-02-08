@@ -49,16 +49,16 @@ const pickupDiscardHandler = (res, userID, gameID, discardPickupIndex) => {
   });
 };
 const playCardsHandler = (res, userID, gameID, cards, continuedSetID) => {
-  res.write(
-    `playCards - userID: ${userID}, cards: ${JSON.stringify(
-      cards
-    )}, continuedSetID: ${continuedSetID}`
-  );
-  res.end();
+  rd.playCards(userID, gameID, cards, continuedSetID).then(message => {
+    res.write(message);
+    res.end();
+  });
 };
 const discardHandler = (res, userID, gameID, discardCard) => {
-  res.write(`discard - userID: ${userID}, discardCard: ${discardCard}`);
-  res.end();
+  rd.discard(userID, gameID, discardCard).then(message => {
+    res.write(message);
+    res.end();
+  });
 };
 const rummyHandler = (res, userID) => {
   res.write(`rummy - userID: ${userID}`);
@@ -127,6 +127,8 @@ const app = http.createServer(function(req, res) {
         var continuedSetID = headers["continued_set_id"];
         if (!cards) {
           throw new Error("No cards to play");
+        } else {
+          cards = JSON.parse(cards);
         }
         var gameID = headers["game_id"];
         if (!gameID) {

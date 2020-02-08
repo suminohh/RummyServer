@@ -28,7 +28,8 @@ module.exports = class RummyDatabase {
 
   createDeck = async gameRef => {
     const deck = new Deck();
-    deck.shuffle();
+    // TODO: add shuffling - removed for testing
+    // deck.shuffle();
     await gameRef
       .collection("deck")
       .add({ cards: deck.cards, cards_used: deck.cardsUsed });
@@ -47,8 +48,37 @@ module.exports = class RummyDatabase {
   };
 
   getHandDocForUser = async (gameRef, userRef) => {
-    var handDocs = await this.getHandDocs(gameRef);
-    return handDocs[0].data().player == userRef ? handDocs[0] : handDocs[1];
+    var hand = await gameRef
+      .collection("hands")
+      .where("player", "==", userRef)
+      .get();
+    return hand.docs[0];
+  };
+
+  removeCardsFromHand = async (handDoc, cards) => {
+    var newCardsInHand = handDoc.data().cards;
+    cards.forEach(card => {
+      const cardInHandIndex = newCardsInHand.indexOf(card);
+      newCardsInHand.splice(cardInHandIndex, 1);
+    });
+
+    await handDoc.ref.update({ cards: newCardsInHand });
+  };
+
+  createSet = async (gameRef, userRef, cards, continuedSetDoc) => {
+    // TODO: reorder cards to be in a proper sequence
+    return await gameRef.collection("sets").add({
+      player: userRef,
+      cards: cards,
+      continued_set: continuedSetDoc ? continuedSetDoc.ref : null
+    });
+  };
+
+  getSetDoc = async (gameRef, setID) => {
+    return await gameRef
+      .collection("sets")
+      .doc(setID)
+      .get();
   };
 
   createGame = async userID => {
@@ -66,12 +96,13 @@ module.exports = class RummyDatabase {
   joinGame = async (userID, gameID) => {
     var returnMessage;
     const userRef = (await this.getUserDoc(userID)).ref;
-    const gameRef = (await this.getGameDoc(gameID)).ref;
+    const gameDoc = await this.getGameDoc(gameID);
+    const gameRef = gameDoc.ref;
     // TODO: fail if player2 is already set
     await gameRef
       .update({ player2: userRef })
       .then(async _ => {
-        await gameRef.collection("hands").add({ player: userRef, cards: [] });
+        await this.createHand(gameRef, userRef);
         var deckDoc = await this.getDeckDoc(gameRef);
         var cards = deckDoc.data().cards;
         var first14Cards = cards.slice(0, 14);
@@ -81,10 +112,13 @@ module.exports = class RummyDatabase {
           p1Hand.push(first14Cards[i]);
           p2Hand.push(first14Cards[i + 1]);
         }
-        var handDocs = await this.getHandDocs(gameRef);
-        const firstHandIsP2 = handDocs[0].data().player == userRef;
-        handDocs[0].ref.update({ cards: firstHandIsP2 ? p2Hand : p1Hand });
-        handDocs[1].ref.update({ cards: firstHandIsP2 ? p1Hand : p2Hand });
+        var p2HandDoc = await this.getHandDocForUser(gameRef, userRef);
+        var p1HandDoc = await this.getHandDocForUser(
+          gameRef,
+          gameDoc.data().player1
+        );
+        p2HandDoc.ref.update({ cards: p2Hand });
+        p1HandDoc.ref.update({ cards: p1Hand });
         var firstDiscard = cards[14];
         gameRef.update({ discard: [firstDiscard] });
         await deckDoc.ref.update({ cards_used: 15 });
@@ -129,5 +163,25 @@ module.exports = class RummyDatabase {
     return "Success";
   };
 
-  playCards = async (userID, gameID, cards) => {};
+  playCards = async (userID, gameID, cards, continuedSetID) => {
+    const userRef = (await this.getUserDoc(userID)).ref;
+    const gameRef = (await this.getGameDoc(gameID)).ref;
+    console.log(userRef);
+    const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
+    var setDoc = null;
+    if (continuedSetID) {
+      setDoc = await this.getSetDoc(gameRef, continuedSetID);
+    }
+    await this.createSet(gameRef, userRef, cards, setDoc);
+    await this.removeCardsFromHand(userHandDoc, cards);
+    return "Success";
+  };
+
+  discard = async (userID, gameID, card) => {
+    const userRef = (await this.getUserDoc(userID)).ref;
+    const gameRef = (await this.getGameDoc(gameID)).ref;
+    const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
+    await this.removeCardsFromHand(userHandDoc, [card]);
+    return "Success";
+  };
 };
