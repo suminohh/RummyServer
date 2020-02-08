@@ -15,6 +15,10 @@ module.exports = class RummyDatabase {
 
   getGameRef = gameID => this.db.collection("games").doc(gameID);
 
+  getGameDoc = async gameID => {
+    return await this.getGameRef(gameID).get();
+  };
+
   getUserRef = async userID => {
     var usersRef = this.db.collection("users");
     console.log(usersRef);
@@ -74,32 +78,30 @@ module.exports = class RummyDatabase {
           .collection("hands")
           .add({ player: userRef, cards: [] })
           .then(async _ => {
-            await this.getDeckRef(gameRef).then(async deckRef => {
-              await deckRef.get().then(async deckDoc => {
-                var cards = deckDoc.data().cards;
-                var first14Cards = cards.slice(0, 14);
-                var p1Hand = [];
-                var p2Hand = [];
-                for (var i = 0; i < 14; i += 2) {
-                  p1Hand.push(first14Cards[i]);
-                  p2Hand.push(first14Cards[i + 1]);
+            await this.getDeckDoc(gameRef).then(async deckDoc => {
+              var cards = deckDoc.data().cards;
+              var first14Cards = cards.slice(0, 14);
+              var p1Hand = [];
+              var p2Hand = [];
+              for (var i = 0; i < 14; i += 2) {
+                p1Hand.push(first14Cards[i]);
+                p2Hand.push(first14Cards[i + 1]);
+              }
+              await this.getHandsRefs(gameRef).then(async handsRefs => {
+                var hand1 = await handsRefs[0].ref.get();
+                if (hand1.data().player == userRef) {
+                  handsRefs[0].ref.update({ cards: p2Hand });
+                  handsRefs[1].ref.update({ cards: p1Hand });
+                } else {
+                  handsRefs[0].ref.update({ cards: p1Hand });
+                  handsRefs[1].ref.update({ cards: p2Hand });
                 }
-                await this.getHandsRefs(gameRef).then(async handsRefs => {
-                  var hand1 = await handsRefs[0].ref.get();
-                  if (hand1.data().player == userRef) {
-                    handsRefs[0].ref.update({ cards: p2Hand });
-                    handsRefs[1].ref.update({ cards: p1Hand });
-                  } else {
-                    handsRefs[0].ref.update({ cards: p1Hand });
-                    handsRefs[1].ref.update({ cards: p2Hand });
-                  }
-                });
+              });
 
-                var firstDiscard = cards[14];
-                gameRef.update({ discard: [firstDiscard] });
-                await deckRef.update({ cards_used: 15 }).then(async _ => {
-                  returnMessage = "Success";
-                });
+              var firstDiscard = cards[14];
+              gameRef.update({ discard: [firstDiscard] });
+              await deckDoc.ref.update({ cards_used: 15 }).then(async _ => {
+                returnMessage = "Success";
               });
             });
           });
