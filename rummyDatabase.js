@@ -34,15 +34,9 @@ module.exports = class RummyDatabase {
       .add({ cards: deck.cards, cards_used: deck.cardsUsed });
   };
 
-  getDeckRef = async gameRef => {
-    var querySnapshot = await gameRef.collection("deck").get();
-    var deckQueryDocumentSnapshot = querySnapshot.docs[0];
-    return deckQueryDocumentSnapshot.ref;
-  };
-
   getDeckDoc = async gameRef => {
-    var deckRef = await this.getDeckRef(gameRef);
-    return await deckRef.get();
+    var querySnapshot = await gameRef.collection("deck").get();
+    return querySnapshot.docs[0];
   };
 
   createHand = async (gameRef, userRef) =>
@@ -51,6 +45,15 @@ module.exports = class RummyDatabase {
   getHandsRefs = async gameRef => {
     var querySnapshot = await gameRef.collection("hands").get();
     return querySnapshot.docs;
+  };
+
+  getHandDocs = async gameRef => {
+    return (await gameRef.collection("hands").get()).docs;
+  };
+
+  getUsersHandDoc = async (gameRef, userRef) => {
+    var handDocs = this.getHandDocs(gameRef);
+    return handDocs[0].data().player == userRef ? handDocs[0] : handDocs[1];
   };
 
   createGame = async userID => {
@@ -86,17 +89,14 @@ module.exports = class RummyDatabase {
                 p1Hand.push(first14Cards[i]);
                 p2Hand.push(first14Cards[i + 1]);
               }
-              await this.getHandsRefs(gameRef).then(async handsRefs => {
-                var hand1 = await handsRefs[0].ref.get();
-                if (hand1.data().player == userRef) {
-                  handsRefs[0].ref.update({ cards: p2Hand });
-                  handsRefs[1].ref.update({ cards: p1Hand });
-                } else {
-                  handsRefs[0].ref.update({ cards: p1Hand });
-                  handsRefs[1].ref.update({ cards: p2Hand });
-                }
-              });
-
+              var handDocs = await this.getHandDocs(gameRef);
+              if (handDocs[0].data().player == userRef) {
+                handDocs[0].ref.update({ cards: p2Hand });
+                handDocs[1].ref.update({ cards: p1Hand });
+              } else {
+                handDocs[0].ref.update({ cards: p1Hand });
+                handDocs[1].ref.update({ cards: p2Hand });
+              }
               var firstDiscard = cards[14];
               gameRef.update({ discard: [firstDiscard] });
               await deckDoc.ref.update({ cards_used: 15 }).then(async _ => {
@@ -105,7 +105,8 @@ module.exports = class RummyDatabase {
             });
           });
       })
-      .catch(_ => {
+      .catch(error => {
+        console.log(error);
         returnMessage = "Game not Found";
       });
     return returnMessage;
@@ -116,27 +117,25 @@ module.exports = class RummyDatabase {
     var returnMessage = "Error";
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameRef = (await this.getGameDoc(gameID)).ref;
-    await this.getDeckRef(gameRef).then(async deckRef => {
-      await deckRef.get().then(async deckDoc => {
-        var cards = deckDoc.data().cards;
-        var cardsUsed = deckDoc.data().cards_used;
-        const pickedUpCard = cards[cardsUsed];
-        deckRef.update({ cards_used: cardsUsed + 1 });
-        await this.getHandsRefs(gameRef).then(async handsRefs => {
-          var hand1 = await handsRefs[0].ref.get();
-          var hand2 = await handsRefs[1].ref.get();
-          if (hand1.data().player == userRef) {
-            handsRefs[0].ref.update({
-              cards: [...hand1.data().cards, pickedUpCard]
-            });
-          } else {
-            handsRefs[1].ref.update({
-              cards: [...hand2.data().cards, pickedUpCard]
-            });
-          }
+    const deckDoc = await this.getDeckDoc(gameRef);
+
+    var cards = deckDoc.data().cards;
+    var cardsUsed = deckDoc.data().cards_used;
+    const pickedUpCard = cards[cardsUsed];
+    deckDoc.ref.update({ cards_used: cardsUsed + 1 });
+    await this.getHandsRefs(gameRef).then(async handsRefs => {
+      var hand1 = await handsRefs[0].ref.get();
+      var hand2 = await handsRefs[1].ref.get();
+      if (hand1.data().player == userRef) {
+        handsRefs[0].ref.update({
+          cards: [...hand1.data().cards, pickedUpCard]
         });
-        returnMessage = "Success";
-      });
+      } else {
+        handsRefs[1].ref.update({
+          cards: [...hand2.data().cards, pickedUpCard]
+        });
+      }
+      returnMessage = "Success";
     });
     return returnMessage;
   };
