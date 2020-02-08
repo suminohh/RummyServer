@@ -43,10 +43,10 @@ const pickupDeckHandler = (res, userID, gameID) => {
   });
 };
 const pickupDiscardHandler = (res, userID, gameID, discardPickupIndex) => {
-  res.write(
-    `pickupDiscard - userID: ${userID}, discardPickupIndex: ${discardPickupIndex}`
-  );
-  res.end();
+  rd.pickupDiscard(userID, gameID, discardPickupIndex).then(message => {
+    res.write(message);
+    res.end();
+  });
 };
 const playCardsHandler = (res, userID, gameID, cards, continuedSetID) => {
   res.write(

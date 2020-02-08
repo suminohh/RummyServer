@@ -42,17 +42,12 @@ module.exports = class RummyDatabase {
   createHand = async (gameRef, userRef) =>
     await gameRef.collection("hands").add({ player: userRef, cards: [] });
 
-  getHandsRefs = async gameRef => {
-    var querySnapshot = await gameRef.collection("hands").get();
-    return querySnapshot.docs;
-  };
-
   getHandDocs = async gameRef => {
     return (await gameRef.collection("hands").get()).docs;
   };
 
-  getUsersHandDoc = async (gameRef, userRef) => {
-    var handDocs = this.getHandDocs(gameRef);
+  getHandDocForUser = async (gameRef, userRef) => {
+    var handDocs = await this.getHandDocs(gameRef);
     return handDocs[0].data().player == userRef ? handDocs[0] : handDocs[1];
   };
 
@@ -76,34 +71,24 @@ module.exports = class RummyDatabase {
     await gameRef
       .update({ player2: userRef })
       .then(async _ => {
-        await gameRef
-          .collection("hands")
-          .add({ player: userRef, cards: [] })
-          .then(async _ => {
-            await this.getDeckDoc(gameRef).then(async deckDoc => {
-              var cards = deckDoc.data().cards;
-              var first14Cards = cards.slice(0, 14);
-              var p1Hand = [];
-              var p2Hand = [];
-              for (var i = 0; i < 14; i += 2) {
-                p1Hand.push(first14Cards[i]);
-                p2Hand.push(first14Cards[i + 1]);
-              }
-              var handDocs = await this.getHandDocs(gameRef);
-              if (handDocs[0].data().player == userRef) {
-                handDocs[0].ref.update({ cards: p2Hand });
-                handDocs[1].ref.update({ cards: p1Hand });
-              } else {
-                handDocs[0].ref.update({ cards: p1Hand });
-                handDocs[1].ref.update({ cards: p2Hand });
-              }
-              var firstDiscard = cards[14];
-              gameRef.update({ discard: [firstDiscard] });
-              await deckDoc.ref.update({ cards_used: 15 }).then(async _ => {
-                returnMessage = "Success";
-              });
-            });
-          });
+        await gameRef.collection("hands").add({ player: userRef, cards: [] });
+        var deckDoc = await this.getDeckDoc(gameRef);
+        var cards = deckDoc.data().cards;
+        var first14Cards = cards.slice(0, 14);
+        var p1Hand = [];
+        var p2Hand = [];
+        for (var i = 0; i < 14; i += 2) {
+          p1Hand.push(first14Cards[i]);
+          p2Hand.push(first14Cards[i + 1]);
+        }
+        var handDocs = await this.getHandDocs(gameRef);
+        const firstHandIsP2 = handDocs[0].data().player == userRef;
+        handDocs[0].ref.update({ cards: firstHandIsP2 ? p2Hand : p1Hand });
+        handDocs[1].ref.update({ cards: firstHandIsP2 ? p1Hand : p2Hand });
+        var firstDiscard = cards[14];
+        gameRef.update({ discard: [firstDiscard] });
+        await deckDoc.ref.update({ cards_used: 15 });
+        returnMessage = "Success";
       })
       .catch(error => {
         console.log(error);
@@ -114,7 +99,6 @@ module.exports = class RummyDatabase {
 
   pickupDeck = async (userID, gameID) => {
     // TODO: check if player is in game, is player's turm, and hasn't already picked up
-    var returnMessage = "Error";
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameRef = (await this.getGameDoc(gameID)).ref;
     const deckDoc = await this.getDeckDoc(gameRef);
@@ -123,21 +107,26 @@ module.exports = class RummyDatabase {
     var cardsUsed = deckDoc.data().cards_used;
     const pickedUpCard = cards[cardsUsed];
     deckDoc.ref.update({ cards_used: cardsUsed + 1 });
-    await this.getHandsRefs(gameRef).then(async handsRefs => {
-      var hand1 = await handsRefs[0].ref.get();
-      var hand2 = await handsRefs[1].ref.get();
-      if (hand1.data().player == userRef) {
-        handsRefs[0].ref.update({
-          cards: [...hand1.data().cards, pickedUpCard]
-        });
-      } else {
-        handsRefs[1].ref.update({
-          cards: [...hand2.data().cards, pickedUpCard]
-        });
-      }
-      returnMessage = "Success";
+    var handDoc = await this.getHandDocForUser(gameRef, userRef);
+    handDoc.ref.update({
+      cards: [...handDoc.data().cards, pickedUpCard]
     });
-    return returnMessage;
+    return "Success";
+  };
+
+  pickupDiscard = async (userID, gameID, discardPickupIndex) => {
+    // TODO: check if player is in game, is player's turm, hasn't already picked up, and can use the card they will be picking up
+    const userRef = (await this.getUserDoc(userID)).ref;
+    const gameDoc = await this.getGameDoc(gameID);
+    const discard = gameDoc.data().discard;
+    const pickedUpCards = discard.slice(discardPickupIndex);
+    const remainingDiscard = discard.slice(0, discardPickupIndex);
+    gameDoc.ref.update({ discard: remainingDiscard });
+    var handDoc = await this.getHandDocForUser(gameDoc.ref, userRef);
+    handDoc.ref.update({
+      cards: [...handDoc.data().cards, pickedUpCards]
+    });
+    return "Success";
   };
 
   playCards = async (userID, gameID, cards) => {};
