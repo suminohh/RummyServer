@@ -13,18 +13,17 @@ module.exports = class RummyDatabase {
     this.db = admin.firestore();
   }
 
-  getGameRef = gameID => this.db.collection("games").doc(gameID);
-
   getGameDoc = async gameID => {
-    return await this.getGameRef(gameID).get();
+    return await this.db
+      .collection("games")
+      .doc(gameID)
+      .get();
   };
 
-  getUserRef = async userID => {
+  getUserDoc = async userID => {
     var usersRef = this.db.collection("users");
-    console.log(usersRef);
-    console.log(userID);
     var querySnapshot = await usersRef.where("user_id", "==", userID).get();
-    return querySnapshot.docs[0].ref;
+    return querySnapshot.docs[0];
   };
 
   createDeck = async gameRef => {
@@ -55,7 +54,7 @@ module.exports = class RummyDatabase {
   };
 
   createGame = async userID => {
-    const userRef = await this.getUserRef(userID);
+    const userRef = (await this.getUserDoc(userID)).ref;
     var gameID = "MISSING";
     var gameRef = await this.db
       .collection("games")
@@ -68,8 +67,8 @@ module.exports = class RummyDatabase {
 
   joinGame = async (userID, gameID) => {
     var returnMessage;
-    const userRef = await this.getUserRef(userID);
-    const gameRef = this.getGameRef(gameID);
+    const userRef = (await this.getUserDoc(userID)).ref;
+    const gameRef = (await this.getGameDoc(gameID)).ref;
     // TODO: fail if player2 is already set
     await gameRef
       .update({ player2: userRef })
@@ -115,8 +114,8 @@ module.exports = class RummyDatabase {
   pickupDeck = async (userID, gameID) => {
     // TODO: check if player is in game, is player's turm, and hasn't already picked up
     var returnMessage = "Error";
-    const userRef = await this.getUserRef(userID);
-    const gameRef = this.getGameRef(gameID);
+    const userRef = (await this.getUserDoc(userID)).ref;
+    const gameRef = (await this.getGameDoc(gameID)).ref;
     await this.getDeckRef(gameRef).then(async deckRef => {
       await deckRef.get().then(async deckDoc => {
         var cards = deckDoc.data().cards;
