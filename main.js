@@ -66,7 +66,7 @@ const rummyHandler = (res, userID) => {
 };
 
 // Create a server object
-const app = http.createServer(function(req, res) {
+const app = http.createServer(async function(req, res) {
   log(req.url);
   var browserUrl = req.url;
   var urlArray = getUrlArray(browserUrl);
@@ -89,6 +89,8 @@ const app = http.createServer(function(req, res) {
       throw new Error("No User ID");
     } else {
       //TODO: validate userID
+      var user = await rd.getUserDoc(userID);
+      if (!user) throw new Error("User doesn't exist");
     }
 
     res.writeHead(200, { "Content-Type": "text/html" });

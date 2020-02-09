@@ -8,6 +8,14 @@ admin.initializeApp({
   databaseURL: "https://rummysite-e9ddf.firebaseio.com"
 });
 
+const GAME_STATE = {
+  setup: "setup",
+  draw: "draw",
+  play: "play",
+  discardPlay: "discardPlay",
+  done: "done"
+};
+
 module.exports = class RummyDatabase {
   constructor() {
     this.db = admin.firestore();
@@ -81,12 +89,32 @@ module.exports = class RummyDatabase {
       .get();
   };
 
+  isPlayersTurn = async (gameDoc, userID) => {
+    const turnRef = gameDoc.data().turn;
+    const turnDoc = await turnRef.get();
+    return userID === turnDoc.data().user_id;
+  };
+
+  isPlayerInGame = async (gameDoc, userID) => {
+    const player1Ref = gameDoc.data().player1;
+    const player1Doc = await player1Ref.get();
+    return userID === player1Doc.data().user_id;
+  };
+
+  isPlayer1Turn = async gameDoc => {
+    const player1Ref = gameDoc.data().player1;
+    const player1Doc = await player1Ref.get();
+    const turnRef = gameDoc.data().turn;
+    const turnDoc = await turnRef.get();
+    return player1Doc.data().user_id === turnDoc.data().user_id;
+  };
+
   createGame = async userID => {
     const userRef = (await this.getUserDoc(userID)).ref;
     var gameID = "MISSING";
     var gameRef = await this.db
       .collection("games")
-      .add({ player1: userRef, turn: userRef });
+      .add({ player1: userRef, turn: userRef, game_state: GAME_STATE.setup });
     gameID = gameRef.id;
     this.createDeck(gameRef);
     this.createHand(gameRef, userRef);
@@ -94,64 +122,77 @@ module.exports = class RummyDatabase {
   };
 
   joinGame = async (userID, gameID) => {
-    var returnMessage;
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
-    // TODO: fail if player2 is already set
-    await gameRef
-      .update({ player2: userRef })
-      .then(async _ => {
-        await this.createHand(gameRef, userRef);
-        var deckDoc = await this.getDeckDoc(gameRef);
-        var cards = deckDoc.data().cards;
-        var first14Cards = cards.slice(0, 14);
-        var p1Hand = [];
-        var p2Hand = [];
-        for (var i = 0; i < 14; i += 2) {
-          p1Hand.push(first14Cards[i]);
-          p2Hand.push(first14Cards[i + 1]);
-        }
-        var p2HandDoc = await this.getHandDocForUser(gameRef, userRef);
-        var p1HandDoc = await this.getHandDocForUser(
-          gameRef,
-          gameDoc.data().player1
-        );
-        p2HandDoc.ref.update({ cards: p2Hand });
-        p1HandDoc.ref.update({ cards: p1Hand });
-        var firstDiscard = cards[14];
-        gameRef.update({ discard: [firstDiscard] });
-        await deckDoc.ref.update({ cards_used: 15 });
-        returnMessage = "Success";
-      })
-      .catch(error => {
-        console.log(error);
-        returnMessage = "Game not Found";
-      });
-    return returnMessage;
+    console.log(gameDoc);
+    if (!gameDoc.exists) {
+      return "Game not found";
+    }
+    if (gameDoc.data().game_state !== GAME_STATE.setup) {
+      return "Game already joined";
+    }
+    if (await this.isPlayerInGame(gameDoc, userID)) {
+      return "Player cannot join twice";
+    }
+    await gameRef.update({ player2: userRef });
+    await this.createHand(gameRef, userRef);
+    var deckDoc = await this.getDeckDoc(gameRef);
+    var cards = deckDoc.data().cards;
+    var first14Cards = cards.slice(0, 14);
+    var p1Hand = [];
+    var p2Hand = [];
+    for (var i = 0; i < 14; i += 2) {
+      p1Hand.push(first14Cards[i]);
+      p2Hand.push(first14Cards[i + 1]);
+    }
+    var p2HandDoc = await this.getHandDocForUser(gameRef, userRef);
+    var p1HandDoc = await this.getHandDocForUser(
+      gameRef,
+      gameDoc.data().player1
+    );
+    p2HandDoc.ref.update({ cards: p2Hand });
+    p1HandDoc.ref.update({ cards: p1Hand });
+    var firstDiscard = cards[14];
+    gameRef.update({ discard: [firstDiscard] });
+    await deckDoc.ref.update({ cards_used: 15 });
+    await gameRef.update({ game_state: GAME_STATE.draw });
+    return "Success";
   };
 
   pickupDeck = async (userID, gameID) => {
-    // TODO: check if player is in game, is player's turm, and hasn't already picked up
-    const userRef = (await this.getUserDoc(userID)).ref;
-    const gameRef = (await this.getGameDoc(gameID)).ref;
-    const deckDoc = await this.getDeckDoc(gameRef);
-
+    const userDoc = await this.getUserDoc(userID);
+    const gameDoc = await this.getGameDoc(gameID);
+    const deckDoc = await this.getDeckDoc(gameDoc.ref);
+    if (!(await this.isPlayersTurn(gameDoc, userID))) {
+      return "Not your turn";
+    }
+    if (gameDoc.data().game_state !== GAME_STATE.draw) {
+      return "Cannot draw now";
+    }
     var cards = deckDoc.data().cards;
     var cardsUsed = deckDoc.data().cards_used;
     const pickedUpCard = cards[cardsUsed];
     deckDoc.ref.update({ cards_used: cardsUsed + 1 });
-    var handDoc = await this.getHandDocForUser(gameRef, userRef);
+    var handDoc = await this.getHandDocForUser(gameDoc.ref, userDoc.ref);
     handDoc.ref.update({
       cards: [...handDoc.data().cards, pickedUpCard]
     });
+    await gameDoc.ref.update({ game_state: GAME_STATE.play });
     return "Success";
   };
 
   pickupDiscard = async (userID, gameID, discardPickupIndex) => {
-    // TODO: check if player is in game, is player's turm, hasn't already picked up, and can use the card they will be picking up
+    // TODO: check if player can use the card they will be picking up - this may be tough
+    // TODO: Save card that needs to be played
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
+    if (!(await this.isPlayersTurn(gameDoc, userID))) {
+      return "Not your turn";
+    }
+    if (gameDoc.data().game_state !== GAME_STATE.draw) {
+      return "Cannot draw now";
+    }
     const discard = gameDoc.data().discard;
     const pickedUpCards = discard.slice(discardPickupIndex);
     const remainingDiscard = discard.slice(0, discardPickupIndex);
@@ -160,13 +201,22 @@ module.exports = class RummyDatabase {
     handDoc.ref.update({
       cards: [...handDoc.data().cards, pickedUpCards]
     });
+    await gameRef.update({ game_state: GAME_STATE.discardPlay });
     return "Success";
   };
 
   playCards = async (userID, gameID, cards, continuedSetID) => {
+    // TODO: Check that the cards can be used in a sequence and exist in player's hand
+    // TODO: If a card played was from discard pickup, clear special discard play flag
     const userRef = (await this.getUserDoc(userID)).ref;
-    const gameRef = (await this.getGameDoc(gameID)).ref;
-    console.log(userRef);
+    const gameDoc = await this.getGameDoc(gameID);
+    const gameRef = gameDoc.ref;
+    if (!(await this.isPlayersTurn(gameDoc, userID))) {
+      return "Not your turn";
+    }
+    if (gameDoc.data().game_state !== GAME_STATE.play) {
+      return "Cannot play cards now";
+    }
     const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
     var setDoc = null;
     if (continuedSetID) {
@@ -178,10 +228,26 @@ module.exports = class RummyDatabase {
   };
 
   discard = async (userID, gameID, card) => {
+    // TODO: If special discard play flag is still set, fail
     const userRef = (await this.getUserDoc(userID)).ref;
-    const gameRef = (await this.getGameDoc(gameID)).ref;
+    const gameDoc = await this.getGameDoc(gameID);
+    const gameRef = gameDoc.ref;
+    if (!(await this.isPlayersTurn(gameDoc, userID))) {
+      return "Not your turn";
+    }
+    if (gameDoc.data().game_state !== GAME_STATE.play) {
+      if (gameDoc.data().game_state === GAME_STATE.discardPlay) {
+        //TODO: Update message with the card name
+        return "Must play XYZ card";
+      }
+      return "Cannot discard now";
+    }
     const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
     await this.removeCardsFromHand(userHandDoc, [card]);
+    var newTurn = (await this.isPlayer1Turn(gameDoc))
+      ? gameDoc.data().player2
+      : gameDoc.data().player1;
+    await gameRef.update({ game_state: GAME_STATE.draw, turn: newTurn });
     return "Success";
   };
 };
