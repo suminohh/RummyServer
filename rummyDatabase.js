@@ -63,6 +63,16 @@ module.exports = class RummyDatabase {
     return hand.docs[0];
   };
 
+  areCardsInHand = (handDoc, cards) => {
+    var cardsInHand = handDoc.data().cards;
+    cards.forEach(card => {
+      if (cardsInHand.indexOf(card) == -1) {
+        return false;
+      }
+    });
+    return true;
+  };
+
   removeCardsFromHand = async (handDoc, cards) => {
     var newCardsInHand = handDoc.data().cards;
     cards.forEach(card => {
@@ -74,7 +84,6 @@ module.exports = class RummyDatabase {
   };
 
   createSet = async (gameRef, userRef, cards, continuedSetDoc) => {
-    // TODO: reorder cards to be in a proper sequence
     return await gameRef.collection("sets").add({
       player: userRef,
       cards: cards,
@@ -109,12 +118,21 @@ module.exports = class RummyDatabase {
     return player1Doc.data().user_id === turnDoc.data().user_id;
   };
 
+  setDiscardPickupCard = async (gameDoc, card) => {
+    await gameDoc.ref.update({ discard_pickup_card: card });
+  };
+
+  getDiscardPickupCard = gameDoc => gameDoc.data().discard_pickup_card;
+
   createGame = async userID => {
     const userRef = (await this.getUserDoc(userID)).ref;
     var gameID = "MISSING";
-    var gameRef = await this.db
-      .collection("games")
-      .add({ player1: userRef, turn: userRef, game_state: GAME_STATE.setup });
+    var gameRef = await this.db.collection("games").add({
+      player1: userRef,
+      turn: userRef,
+      game_state: GAME_STATE.setup,
+      discard_pickup_card: null
+    });
     gameID = gameRef.id;
     this.createDeck(gameRef);
     this.createHand(gameRef, userRef);
@@ -183,8 +201,6 @@ module.exports = class RummyDatabase {
   };
 
   pickupDiscard = async (userID, gameID, discardPickupIndex) => {
-    // TODO: check if player can use the card they will be picking up - this may be tough
-    // TODO: Save card that needs to be played
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
     if (!(await this.isPlayersTurn(gameDoc, userID))) {
@@ -196,28 +212,43 @@ module.exports = class RummyDatabase {
     const discard = gameDoc.data().discard;
     const pickedUpCards = discard.slice(discardPickupIndex);
     const remainingDiscard = discard.slice(0, discardPickupIndex);
+    // TODO: check if player can use the card they will be picking up - this may be tough
     gameDoc.ref.update({ discard: remainingDiscard });
     var handDoc = await this.getHandDocForUser(gameDoc.ref, userRef);
     handDoc.ref.update({
-      cards: [...handDoc.data().cards, pickedUpCards]
+      cards: [...handDoc.data().cards, ...pickedUpCards]
     });
-    await gameRef.update({ game_state: GAME_STATE.discardPlay });
+    await this.setDiscardPickupCard(gameDoc, pickedUpCards[0]);
+    await gameDoc.ref.update({ game_state: GAME_STATE.discardPlay });
     return "Success";
   };
 
   playCards = async (userID, gameID, cards, continuedSetID) => {
     // TODO: Check that the cards can be used in a sequence and exist in player's hand
-    // TODO: If a card played was from discard pickup, clear special discard play flag
+    // TODO: reorder cards to be in a proper sequence
+    // TODO: if a discard was picked up, cannot play a sequence that makes it impossible to play that card
+    //       alternatively, that card must be played first
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
     if (!(await this.isPlayersTurn(gameDoc, userID))) {
       return "Not your turn";
     }
-    if (gameDoc.data().game_state !== GAME_STATE.play) {
+    if (
+      gameDoc.data().game_state !== GAME_STATE.play &&
+      gameDoc.data().game_state !== GAME_STATE.discardPlay
+    ) {
       return "Cannot play cards now";
     }
     const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
+    if (!this.areCardsInHand(userHandDoc, cards)) {
+      return "Card(s) not in your hand";
+    }
+    var discardPickupCard = await this.getDiscardPickupCard(gameDoc);
+    if (discardPickupCard && cards.indexOf(discardPickupCard) != -1) {
+      await this.setDiscardPickupCard(gameDoc, null);
+      await gameRef.update({ game_state: GAME_STATE.play });
+    }
     var setDoc = null;
     if (continuedSetID) {
       setDoc = await this.getSetDoc(gameRef, continuedSetID);
@@ -228,7 +259,6 @@ module.exports = class RummyDatabase {
   };
 
   discard = async (userID, gameID, card) => {
-    // TODO: If special discard play flag is still set, fail
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
@@ -237,12 +267,15 @@ module.exports = class RummyDatabase {
     }
     if (gameDoc.data().game_state !== GAME_STATE.play) {
       if (gameDoc.data().game_state === GAME_STATE.discardPlay) {
-        //TODO: Update message with the card name
-        return "Must play XYZ card";
+        var discardPickupCard = await this.getDiscardPickupCard(gameDoc);
+        return `Must play the ${discardPickupCard} before discarding`;
       }
       return "Cannot discard now";
     }
     const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
+    if (!this.areCardsInHand(userHandDoc, [card])) {
+      return "Card is not in your hand";
+    }
     await this.removeCardsFromHand(userHandDoc, [card]);
     var newTurn = (await this.isPlayer1Turn(gameDoc))
       ? gameDoc.data().player2
