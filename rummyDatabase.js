@@ -124,6 +124,8 @@ module.exports = class RummyDatabase {
 
   getDiscardPickupCard = gameDoc => gameDoc.data().discard_pickup_card;
 
+  sequenceFromCards = cards => Deck.sequenceFromCards(cards);
+
   createGame = async userID => {
     const userRef = (await this.getUserDoc(userID)).ref;
     var gameID = "MISSING";
@@ -224,10 +226,6 @@ module.exports = class RummyDatabase {
   };
 
   playCards = async (userID, gameID, cards, continuedSetID) => {
-    // TODO: Check that the cards can be used in a sequence and exist in player's hand
-    // TODO: reorder cards to be in a proper sequence
-    // TODO: if a discard was picked up, cannot play a sequence that makes it impossible to play that card
-    //       alternatively, that card must be played first
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
@@ -245,16 +243,37 @@ module.exports = class RummyDatabase {
       return "Card(s) not in your hand";
     }
     var discardPickupCard = await this.getDiscardPickupCard(gameDoc);
-    if (discardPickupCard && cards.indexOf(discardPickupCard) != -1) {
-      await this.setDiscardPickupCard(gameDoc, null);
-      await gameRef.update({ game_state: GAME_STATE.play });
+    if (discardPickupCard) {
+      if (orderedCards.indexOf(discardPickupCard) != -1) {
+        await this.setDiscardPickupCard(gameDoc, null);
+        await gameRef.update({ game_state: GAME_STATE.play });
+      } else {
+        return `Must play the ${discardPickupCard} in a set before any other set`;
+      }
     }
+    // TODO: reorder cards to be in a proper sequence
+    // TODO: if continued set, get the continued set chain of cards and create a new cards array
+
+    var orderedCards = [...cards]; // ordered cards to be played
+
+    const sequenceType = this.sequenceFromCards(orderedCards); // Check if cards alone are a sequence
+    if (!sequenceType[0]) return sequenceType[1];
+
+    // TODO: should traverse each setDoc until continuedset is null
+    // TODO: Make continuedsets bidirecitonal so you can traverse up as well, example placing an ace on sequence 2,3,4
     var setDoc = null;
     if (continuedSetID) {
       setDoc = await this.getSetDoc(gameRef, continuedSetID);
     }
-    await this.createSet(gameRef, userRef, cards, setDoc);
-    await this.removeCardsFromHand(userHandDoc, cards);
+
+    var allOrderedCards = [...cards]; // cards to be played and cards from continued set, ordered
+
+    const allCardsSequencetype = this.sequenceFromCards(allOrderedCards); // Check if all cards can be a sequence
+    if (!allCardsSequencetype[0])
+      return `Cards selected from hand are a set, but cannot be attached to the played set: ${allCardsSequencetype[1]}`;
+
+    await this.createSet(gameRef, userRef, orderedCards, setDoc.ref);
+    await this.removeCardsFromHand(userHandDoc, orderedCards);
     return "Success";
   };
 
