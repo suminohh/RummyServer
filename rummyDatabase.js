@@ -83,11 +83,26 @@ module.exports = class RummyDatabase {
     await handDoc.ref.update({ cards: newCardsInHand });
   };
 
-  createSet = async (gameRef, userRef, cards, continuedSetDoc) => {
+  createSet = async (
+    gameRef,
+    userRef,
+    cards,
+    sameSuitContinuedSetDoc,
+    straightContinuedSetDocBelow,
+    straightContinuedSetDocAbove
+  ) => {
     return await gameRef.collection("sets").add({
       player: userRef,
       cards: cards,
-      continued_set: continuedSetDoc ? continuedSetDoc.ref : null
+      same_suit_continued_set: sameSuitContinuedSetDoc
+        ? sameSuitContinuedSetDoc.ref
+        : null,
+      straight_continued_set_below: straightContinuedSetDocBelow
+        ? straightContinuedSetDocBelow.ref
+        : null,
+      straight_continued_set_above: straightContinuedSetDocAbove
+        ? straightContinuedSetDocAbove.ref
+        : null
     });
   };
 
@@ -251,28 +266,45 @@ module.exports = class RummyDatabase {
         return `Must play the ${discardPickupCard} in a set before any other set`;
       }
     }
-    // TODO: reorder cards to be in a proper sequence
-    // TODO: if continued set, get the continued set chain of cards and create a new cards array
+    var orderedCards = [];
 
-    var orderedCards = [...cards]; // ordered cards to be played
+    var potentialSet = Deck.potentialTypeOfSet(cards); // Check if cards alone are a sequence
+    if (!potentialSet[0]) return potentialSet[1];
+    if (potentialSet[1] == "Straight") {
+      var isValidStraight = Deck.validateStraight(cards);
+      if (!isValidStraight[0]) return "Invalid Straight";
+      orderedCards = isValidStraight[1];
+    }
 
-    const sequenceType = this.sequenceFromCards(orderedCards); // Check if cards alone are a sequence
-    if (!sequenceType[0]) return sequenceType[1];
+    var allCards = [...cards]; // initiate allCards with passed cards
 
-    // TODO: should traverse each setDoc until continuedset is null
-    // TODO: Make continuedsets bidirecitonal so you can traverse up as well, example placing an ace on sequence 2,3,4
     var setDoc = null;
     if (continuedSetID) {
       setDoc = await this.getSetDoc(gameRef, continuedSetID);
+      if (potentialSet[1] == "Straight") {
+        // TODO: should traverse each setDoc until continuedset is null
+        // TODO: Check if cards in continued set are above or below the current cards
+        // will follow the same (up or down) until null on each card set
+      }
     }
 
-    var allOrderedCards = [...cards]; // cards to be played and cards from continued set, ordered
+    var potentialFullSet = Deck.potentialTypeOfSet(allCards); // Check if cards alone are a sequence
+    if (!potentialFullSet[0])
+      return `Cards selected from hand are a ${potentialSet[1]}, but cannot be attached to the played set because: ${potentialFullSet[1]}`;
+    if (potentialFullSet[1] == "Straight") {
+      var isValidStraight = Deck.validateStraight(allCards);
+      if (!isValidStraight[0]) return "Invalid Straight";
+    }
 
-    const allCardsSequencetype = this.sequenceFromCards(allOrderedCards); // Check if all cards can be a sequence
-    if (!allCardsSequencetype[0])
-      return `Cards selected from hand are a set, but cannot be attached to the played set: ${allCardsSequencetype[1]}`;
-
-    await this.createSet(gameRef, userRef, orderedCards, setDoc.ref);
+    if (potentialFullSet[1] == "Straight") {
+      // TODO: The following:
+      //if setDoc is below
+      // await this.createSet(gameRef, userRef, orderedCards, null, setDoc, null);
+      //if setDoc is above
+      // await this.createSet(gameRef, userRef, orderedCards, null, null, setDoc);
+    } else {
+      await this.createSet(gameRef, userRef, orderedCards, setDoc, null, null);
+    }
     await this.removeCardsFromHand(userHandDoc, orderedCards);
     return "Success";
   };

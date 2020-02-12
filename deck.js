@@ -53,42 +53,78 @@ module.exports = class Deck {
     this.cardsUsed = 0;
   }
 
-  static sequenceFromCards(cards) {
-    if (!(cards.length >= 3)) return [false, "Sequence too short"];
-    const firstCardParts = cards[0].split(" ");
-    var differentSuits = false;
-    var differentValues = false;
-    var cardValues = [];
-    var cardSuits = [];
+  static potentialTypeOfSet(cards) {
+    var cardValues = new Set();
+    var cardSuits = new Set();
+    var cardsSet = new Set();
+    var fakeSuit = false;
+    var fakeValue = false;
     cards.forEach(card => {
       const cardParts = card.split(" ");
-      if (cardParts[0] !== firstCardParts[0]) differentValues = true;
-      if (cardParts[2] !== firstCardParts[2]) differentSuits = true;
-      cardValues.push(cardParts[0]);
-      cardSuits.push(cardParts[2]);
+      if (values.indexOf(cardParts[0]) !== -1) fakeValue = true;
+      if (suits.indexOf(cardParts[2]) !== -1) fakeSuit = true;
+      cardsSet.add(card);
+      cardValues.add(cardParts[0]);
+      cardSuits.add(cardParts[2]);
     });
-    if (differentSuits && !differentValues) {
-      if (!(cards.length <= 4)) return [false, "Too many cards"];
-      var sameSuits = false;
-      for (var index = 0; index < cardSuits.length - 1; index++) {
-        if (cardSuits.slice(index + 1).indexOf(cardSuits[index]) !== -1)
-          sameSuits = true;
-      }
-      if (sameSuits) return [false, "Random cards"];
-      return [true, "Same Value Set"];
-    }
-    if (!differentSuits && differentValues) {
-      var properStraight = true;
-      for (var index = 0; index < cardValues.length - 1; index++) {
-        const curCardValPlusOne =
-          valuesCycle[valuesCycle.indexOf(cardValues[index]) + 1];
-        if (curCardValPlusOne !== cardValues[index + 1]) properStraight = false;
-      }
-      if (properStraight) {
-        if (!(cards.length <= 13)) return [false, "Too many cards"];
-        return [true, "Straight Set"];
-      }
-    }
+    if (cards.length > 3) return [false, "Not enough cards"];
+    if (fakeValue || fakeSuit) return [false, "Invalid suit or value"];
+    if (cardsSet.size != cards.length) return [false, "Duplicate card"];
+    if (
+      cardSuits.size === 1 &&
+      cardValues.size === cards.length &&
+      cards.length <= 13
+    )
+      return [true, "Straight"];
+    if (
+      cardSuits.size === cards.length &&
+      cardValues.size === 1 &&
+      cards.length <= 4
+    )
+      return [true, "Same Value"];
     return [false, "Random cards"];
+  }
+
+  static orderStraight(cards, aceLast) {
+    var orderedCards = [...cards];
+    const valuesSlice = aceLast ? valuesCycle.slice(1) : valuesCycle(0, 13);
+    orderedCards.sort((a, b) => {
+      const indexA = valuesSlice.indexOf(a.split(" ")[0]);
+      const indexB = valuesSlice.indexOf(b.split(" ")[0]);
+      if (indexA < indexB) {
+        return -1;
+      }
+      if (indexA > indexB) {
+        return 1;
+      }
+      return 0;
+    });
+    return orderedCards;
+  }
+
+  static validateStraight(cards) {
+    const aceFirstOrderedCards = this.orderStraight(cards, false);
+    var properStraight = true;
+    for (var index = 0; index < aceFirstOrderedCards.length - 1; index++) {
+      const curCardValPlusOne =
+        valuesCycle[
+          valuesCycle.indexOf(aceFirstOrderedCards[index].split(" ")[0]) + 1
+        ];
+      if (curCardValPlusOne !== aceFirstOrderedCards[index + 1].split(" ")[0])
+        properStraight = false;
+    }
+    if (properStraight) return [true, aceFirstOrderedCards];
+    const aceLastOrderedCards = this.orderStraight(cards, true);
+    var properStraight = true;
+    for (var index = 0; index < aceLastOrderedCards.length - 1; index++) {
+      const curCardValPlusOne =
+        valuesCycle[
+          valuesCycle.indexOf(aceLastOrderedCards[index].split(" ")[0]) + 1
+        ];
+      if (curCardValPlusOne !== aceLastOrderedCards[index + 1].split(" ")[0])
+        properStraight = false;
+    }
+    if (properStraight) return [true, aceLastOrderedCards];
+    return [false, cards];
   }
 };
