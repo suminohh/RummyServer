@@ -53,7 +53,7 @@ module.exports = class Deck {
     this.cardsUsed = 0;
   }
 
-  static potentialTypeOfSet(cards) {
+  static potentialTypeOfSet(cards, isContinuing) {
     var cardValues = new Set();
     var cardSuits = new Set();
     var cardsSet = new Set();
@@ -67,7 +67,8 @@ module.exports = class Deck {
       cardValues.add(cardParts[0]);
       cardSuits.add(cardParts[2]);
     });
-    if (cards.length < 3) return [false, "Not enough cards"];
+    if (cards.length < 3 && !isContinuing) return [false, "Not enough cards"];
+    if (cards.length === 1 && isContinuing) return [true, "Wild"];
     if (fakeValue || fakeSuit) return [false, "Invalid suit or value"];
     if (cardsSet.size != cards.length) return [false, "Duplicate card"];
     if (
