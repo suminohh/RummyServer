@@ -87,6 +87,7 @@ module.exports = class RummyDatabase {
     gameRef,
     userRef,
     cards,
+    setType,
     sameSuitContinuedSetDoc,
     straightContinuedSetDocBelow,
     straightContinuedSetDocAbove
@@ -94,6 +95,7 @@ module.exports = class RummyDatabase {
     return await gameRef.collection("sets").add({
       player: userRef,
       cards: cards,
+      set_type: setType,
       same_suit_continued_set: sameSuitContinuedSetDoc
         ? sameSuitContinuedSetDoc.ref
         : null,
@@ -111,6 +113,26 @@ module.exports = class RummyDatabase {
       .collection("sets")
       .doc(setID)
       .get();
+  };
+
+  traverseSets = async (upwards, setDoc, cards) => {
+    var setCards = [...cards, ...setDoc.data().cards];
+    if (upwards) {
+      if (setDoc.data().straight_continued_set_above) {
+        const newSetDoc = await setDoc
+          .data()
+          .straight_continued_set_above.get();
+        return await this.traverseSets(upwards, newSetDoc, setCards);
+      }
+    } else {
+      if (setDoc.data().straight_continued_set_below) {
+        const newSetDoc = await setDoc
+          .data()
+          .straight_continued_set_below.get();
+        return await this.traverseSets(upwards, newSetDoc, setCards);
+      }
+    }
+    return setCards;
   };
 
   isPlayersTurn = async (gameDoc, userID) => {
@@ -160,7 +182,6 @@ module.exports = class RummyDatabase {
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
-    console.log(gameDoc);
     if (!gameDoc.exists) {
       return "Game not found";
     }
@@ -254,9 +275,10 @@ module.exports = class RummyDatabase {
       return "Cannot play cards now";
     }
     const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
-    if (!this.areCardsInHand(userHandDoc, cards)) {
-      return "Card(s) not in your hand";
-    }
+    // TODO: reenable once server is done
+    // if (!this.areCardsInHand(userHandDoc, cards)) {
+    //   return "Card(s) not in your hand";
+    // }
     var discardPickupCard = await this.getDiscardPickupCard(gameDoc);
     if (discardPickupCard) {
       if (orderedCards.indexOf(discardPickupCard) != -1) {
@@ -268,7 +290,7 @@ module.exports = class RummyDatabase {
     }
     var orderedCards = [];
 
-    var potentialSet = Deck.potentialTypeOfSet(cards); // Check if cards alone are a sequence
+    var potentialSet = Deck.potentialTypeOfSet(cards);
     if (!potentialSet[0]) return potentialSet[1];
     if (potentialSet[1] == "Straight") {
       var isValidStraight = Deck.validateStraight(cards);
@@ -276,36 +298,98 @@ module.exports = class RummyDatabase {
       orderedCards = isValidStraight[1];
     }
 
-    var allCards = [...cards]; // initiate allCards with passed cards
+    var allCards = [...cards];
 
     var setDoc = null;
+    var continuedCards = [];
+    var cardCompare = 0;
     if (continuedSetID) {
       setDoc = await this.getSetDoc(gameRef, continuedSetID);
-      if (potentialSet[1] == "Straight") {
-        // TODO: should traverse each setDoc until continuedset is null
-        // TODO: Check if cards in continued set are above or below the current cards
-        // will follow the same (up or down) until null on each card set
+      continuedCards = setDoc.data().cards;
+      if (setDoc.data().set_type !== potentialSet[1]) {
+        return `Cannot play off of selected set becase it is not a ${potentialSet[1]} set`;
       }
-    }
+      if (potentialSet[1] == "Straight") {
+        cardCompare = Deck.compareCards(
+          continuedCards[0],
+          orderedCards[orderedCards.length - 1]
+        );
+        if (cardCompare !== 0) {
+          allCards = await this.traverseSets(
+            cardCompare == 1,
+            setDoc,
+            orderedCards
+          );
+        } else {
+          return `Cannot play off of selected because the straight is invalid`;
+        }
+      }
+      var potentialFullSet = Deck.potentialTypeOfSet(allCards);
+      if (!potentialFullSet[0])
+        return `Cards selected from hand are a ${potentialSet[1]}, but cannot be attached to the played set because: ${potentialFullSet[1]}`;
+      if (potentialFullSet[1] == "Straight") {
+        var isValidStraight = Deck.validateStraight(allCards);
+        if (!isValidStraight[0]) return "Invalid Straight";
+      }
 
-    var potentialFullSet = Deck.potentialTypeOfSet(allCards); // Check if cards alone are a sequence
-    if (!potentialFullSet[0])
-      return `Cards selected from hand are a ${potentialSet[1]}, but cannot be attached to the played set because: ${potentialFullSet[1]}`;
-    if (potentialFullSet[1] == "Straight") {
-      var isValidStraight = Deck.validateStraight(allCards);
-      if (!isValidStraight[0]) return "Invalid Straight";
-    }
-
-    if (potentialFullSet[1] == "Straight") {
-      // TODO: The following:
-      //if setDoc is below
-      // await this.createSet(gameRef, userRef, orderedCards, null, setDoc, null);
-      //if setDoc is above
-      // await this.createSet(gameRef, userRef, orderedCards, null, null, setDoc);
+      if (potentialFullSet[1] == "Straight") {
+        if (cardCompare === -1) {
+          if (setDoc.data().straight_continued_set_above) {
+            return "Set is already continued upward";
+          }
+          const newSetRef = await this.createSet(
+            gameRef,
+            userRef,
+            orderedCards,
+            "Straight",
+            null,
+            setDoc,
+            null
+          );
+          setDoc.ref.update({ straight_continued_set_above: newSetRef });
+        } else if (cardCompare === 1) {
+          if (setDoc.data().straight_continued_set_below) {
+            return "Set is already continued downward";
+          }
+          const newSetRef = await this.createSet(
+            gameRef,
+            userRef,
+            orderedCards,
+            "Straight",
+            null,
+            null,
+            setDoc
+          );
+          setDoc.ref.update({ straight_continued_set_below: newSetRef });
+        } else {
+          return `unknown error`;
+        }
+      } else {
+        const newSetRef = await this.createSet(
+          gameRef,
+          userRef,
+          orderedCards,
+          "Same Value",
+          setDoc,
+          null,
+          null
+        );
+        setDoc.ref.update({ same_suit_continued_set: newSetRef });
+      }
     } else {
-      await this.createSet(gameRef, userRef, orderedCards, setDoc, null, null);
+      await this.createSet(
+        gameRef,
+        userRef,
+        orderedCards,
+        potentialSet[1],
+        null,
+        null,
+        null
+      );
     }
-    await this.removeCardsFromHand(userHandDoc, orderedCards);
+
+    // TODO: reenable once server is done
+    // await this.removeCardsFromHand(userHandDoc, orderedCards);
     return "Success";
   };
 

@@ -61,13 +61,13 @@ module.exports = class Deck {
     var fakeValue = false;
     cards.forEach(card => {
       const cardParts = card.split(" ");
-      if (values.indexOf(cardParts[0]) !== -1) fakeValue = true;
-      if (suits.indexOf(cardParts[2]) !== -1) fakeSuit = true;
+      if (values.indexOf(cardParts[0]) === -1) fakeValue = true;
+      if (suits.indexOf(cardParts[2]) === -1) fakeSuit = true;
       cardsSet.add(card);
       cardValues.add(cardParts[0]);
       cardSuits.add(cardParts[2]);
     });
-    if (cards.length > 3) return [false, "Not enough cards"];
+    if (cards.length < 3) return [false, "Not enough cards"];
     if (fakeValue || fakeSuit) return [false, "Invalid suit or value"];
     if (cardsSet.size != cards.length) return [false, "Duplicate card"];
     if (
@@ -87,18 +87,7 @@ module.exports = class Deck {
 
   static orderStraight(cards, aceLast) {
     var orderedCards = [...cards];
-    const valuesSlice = aceLast ? valuesCycle.slice(1) : valuesCycle(0, 13);
-    orderedCards.sort((a, b) => {
-      const indexA = valuesSlice.indexOf(a.split(" ")[0]);
-      const indexB = valuesSlice.indexOf(b.split(" ")[0]);
-      if (indexA < indexB) {
-        return -1;
-      }
-      if (indexA > indexB) {
-        return 1;
-      }
-      return 0;
-    });
+    orderedCards.sort((a, b) => this.compareCards(a, b, aceLast));
     return orderedCards;
   }
 
@@ -126,5 +115,20 @@ module.exports = class Deck {
     }
     if (properStraight) return [true, aceLastOrderedCards];
     return [false, cards];
+  }
+
+  static compareCards(a, b, aceLast) {
+    const valuesSlice = aceLast
+      ? valuesCycle.slice(1)
+      : valuesCycle.slice(0, 13);
+    const indexA = valuesSlice.indexOf(a.split(" ")[0]);
+    const indexB = valuesSlice.indexOf(b.split(" ")[0]);
+    if (indexA < indexB) {
+      return -1;
+    }
+    if (indexA > indexB) {
+      return 1;
+    }
+    return 0;
   }
 };
