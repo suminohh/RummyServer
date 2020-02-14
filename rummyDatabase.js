@@ -289,7 +289,8 @@ module.exports = class RummyDatabase {
       }
     }
     var orderedCards = [];
-
+    // TODO: This will fail if <3 cards, which shouldn't always fail- ex playing 1 card off of another set
+    // maybe don't check just the cards unless there isn't a continued set.
     var potentialSet = Deck.potentialTypeOfSet(cards);
     if (!potentialSet[0]) return potentialSet[1];
     if (potentialSet[1] == "Straight") {
