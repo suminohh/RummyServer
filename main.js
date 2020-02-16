@@ -1,6 +1,12 @@
 const url = require("url");
 const http = require("http");
-const Deck = require("./deck");
+const Test = require("./test");
+const RummyDatabase = require("./rummyDatabase");
+
+var rd = new RummyDatabase();
+
+// const test = new Test();
+// test.testCreateAndJoinGame();
 
 var args = process.argv.slice(2);
 const DEBUG = args.length > 0 && args[0] === "debug";
@@ -19,35 +25,48 @@ const getUrlArray = url => {
 };
 
 const createGameHandler = (res, userID) => {
-  res.write(`createGame - userID: ${userID}`);
+  rd.createGame(userID).then(gameID => {
+    res.write(gameID);
+    res.end();
+  });
 };
-const joinGameHandler = (res, userID) => {
-  res.write(`joinGame - userID: ${userID}`);
+const joinGameHandler = (res, userID, gameID) => {
+  rd.joinGame(userID, gameID).then(message => {
+    res.write(message);
+    res.end();
+  });
 };
-const pickupDeckHandler = (res, userID) => {
-  res.write(`pickupDeck - userID: ${userID}`);
+const pickupDeckHandler = (res, userID, gameID) => {
+  rd.pickupDeck(userID, gameID).then(message => {
+    res.write(message);
+    res.end();
+  });
 };
-const pickupDiscardHandler = (res, userID, discardPickupIndex) => {
-  res.write(
-    `pickupDiscard - userID: ${userID}, discardPickupIndex: ${discardPickupIndex}`
-  );
+const pickupDiscardHandler = (res, userID, gameID, discardPickupIndex) => {
+  rd.pickupDiscard(userID, gameID, discardPickupIndex).then(message => {
+    res.write(message);
+    res.end();
+  });
 };
-const playCardsHandler = (res, userID, cards, continuedSetID) => {
-  res.write(
-    `playCards - userID: ${userID}, cards: ${JSON.stringify(
-      cards
-    )}, continuedSetID: ${continuedSetID}`
-  );
+const playCardsHandler = (res, userID, gameID, cards, continuedSetID) => {
+  rd.playCards(userID, gameID, cards, continuedSetID).then(message => {
+    res.write(message);
+    res.end();
+  });
 };
-const discardHandler = (res, userID, discardCard) => {
-  res.write(`discard - userID: ${userID}, discardCard: ${discardCard}`);
+const discardHandler = (res, userID, gameID, discardCard) => {
+  rd.discard(userID, gameID, discardCard).then(message => {
+    res.write(message);
+    res.end();
+  });
 };
 const rummyHandler = (res, userID) => {
   res.write(`rummy - userID: ${userID}`);
+  res.end();
 };
 
 // Create a server object
-const app = http.createServer(function(req, res) {
+const app = http.createServer(async function(req, res) {
   log(req.url);
   var browserUrl = req.url;
   var urlArray = getUrlArray(browserUrl);
@@ -70,6 +89,8 @@ const app = http.createServer(function(req, res) {
       throw new Error("No User ID");
     } else {
       //TODO: validate userID
+      var user = await rd.getUserDoc(userID);
+      if (!user) throw new Error("User doesn't exist");
     }
 
     res.writeHead(200, { "Content-Type": "text/html" });
@@ -79,32 +100,54 @@ const app = http.createServer(function(req, res) {
         createGameHandler(res, userID);
         break;
       case "joinGame":
-        joinGameHandler(res, userID);
+        var gameID = headers["game_id"];
+        if (!gameID) {
+          throw new Error("No game ID");
+        }
+        joinGameHandler(res, userID, gameID);
         break;
       case "pickupDeck":
-        pickupDeckHandler(res, userID);
+        var gameID = headers["game_id"];
+        if (!gameID) {
+          throw new Error("No game ID");
+        }
+        pickupDeckHandler(res, userID, gameID);
         break;
       case "pickupDiscard":
         var discardPickupIndex = headers["discard_pickup_index"];
         if (!discardPickupIndex) {
           throw new Error("No discard pickup index");
         }
-        pickupDiscardHandler(res, userID, discardPickupIndex);
+        var gameID = headers["game_id"];
+        if (!gameID) {
+          throw new Error("No game ID");
+        }
+        pickupDiscardHandler(res, userID, gameID, discardPickupIndex);
         break;
       case "playCards":
         var cards = headers["cards"];
         var continuedSetID = headers["continued_set_id"];
         if (!cards) {
           throw new Error("No cards to play");
+        } else {
+          cards = JSON.parse(cards);
         }
-        playCardsHandler(res, userID, cards, continuedSetID);
+        var gameID = headers["game_id"];
+        if (!gameID) {
+          throw new Error("No game ID");
+        }
+        playCardsHandler(res, userID, gameID, cards, continuedSetID);
         break;
       case "discard":
         var discardCard = headers["discard_card"];
         if (!discardCard) {
           throw new Error("No card to discard");
         }
-        discardHandler(res, userID, discardCard);
+        var gameID = headers["game_id"];
+        if (!gameID) {
+          throw new Error("No game ID");
+        }
+        discardHandler(res, userID, gameID, discardCard);
         break;
       case "rummy":
         rummyHandler(res, userID);
@@ -117,9 +160,8 @@ const app = http.createServer(function(req, res) {
     log(err);
     res.writeHead(404, { "Content-Type": "text/html" });
     res.write(`Malformed Request: ${err.message}`);
+    res.end();
   }
-
-  res.end();
 });
 
 app.listen(3000, function() {

@@ -14,6 +14,7 @@ const values = [
   "Queen",
   "King"
 ];
+const valuesCycle = [...values, "Ace"];
 const cards = suits.flatMap(suit => {
   return values.map(value => `${value} of ${suit}`);
 });
@@ -50,5 +51,85 @@ module.exports = class Deck {
   reset() {
     this.cards = [...cards];
     this.cardsUsed = 0;
+  }
+
+  static potentialTypeOfSet(cards, isContinuing) {
+    var cardValues = new Set();
+    var cardSuits = new Set();
+    var cardsSet = new Set();
+    var fakeSuit = false;
+    var fakeValue = false;
+    cards.forEach(card => {
+      const cardParts = card.split(" ");
+      if (values.indexOf(cardParts[0]) === -1) fakeValue = true;
+      if (suits.indexOf(cardParts[2]) === -1) fakeSuit = true;
+      cardsSet.add(card);
+      cardValues.add(cardParts[0]);
+      cardSuits.add(cardParts[2]);
+    });
+    if (cards.length < 3 && !isContinuing) return [false, "Not enough cards"];
+    if (cards.length === 1 && isContinuing) return [true, "Wild"];
+    if (fakeValue || fakeSuit) return [false, "Invalid suit or value"];
+    if (cardsSet.size != cards.length) return [false, "Duplicate card"];
+    if (
+      cardSuits.size === 1 &&
+      cardValues.size === cards.length &&
+      cards.length <= 13
+    )
+      return [true, "Straight"];
+    if (
+      cardSuits.size === cards.length &&
+      cardValues.size === 1 &&
+      cards.length <= 4
+    )
+      return [true, "Same Value"];
+    return [false, "Random cards"];
+  }
+
+  static orderStraight(cards, aceLast) {
+    var orderedCards = [...cards];
+    orderedCards.sort((a, b) => this.compareCards(a, b, aceLast));
+    return orderedCards;
+  }
+
+  static validateStraight(cards) {
+    const aceFirstOrderedCards = this.orderStraight(cards, false);
+    var properStraight = true;
+    for (var index = 0; index < aceFirstOrderedCards.length - 1; index++) {
+      const curCardValPlusOne =
+        valuesCycle[
+          valuesCycle.indexOf(aceFirstOrderedCards[index].split(" ")[0]) + 1
+        ];
+      if (curCardValPlusOne !== aceFirstOrderedCards[index + 1].split(" ")[0])
+        properStraight = false;
+    }
+    if (properStraight) return [true, aceFirstOrderedCards];
+    const aceLastOrderedCards = this.orderStraight(cards, true);
+    var properStraight = true;
+    for (var index = 0; index < aceLastOrderedCards.length - 1; index++) {
+      const curCardValPlusOne =
+        valuesCycle[
+          valuesCycle.indexOf(aceLastOrderedCards[index].split(" ")[0]) + 1
+        ];
+      if (curCardValPlusOne !== aceLastOrderedCards[index + 1].split(" ")[0])
+        properStraight = false;
+    }
+    if (properStraight) return [true, aceLastOrderedCards];
+    return [false, cards];
+  }
+
+  static compareCards(a, b, aceLast) {
+    const valuesSlice = aceLast
+      ? valuesCycle.slice(1)
+      : valuesCycle.slice(0, 13);
+    const indexA = valuesSlice.indexOf(a.split(" ")[0]);
+    const indexB = valuesSlice.indexOf(b.split(" ")[0]);
+    if (indexA < indexB) {
+      return -1;
+    }
+    if (indexA > indexB) {
+      return 1;
+    }
+    return 0;
   }
 };
