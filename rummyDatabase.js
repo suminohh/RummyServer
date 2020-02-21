@@ -29,6 +29,19 @@ module.exports = class RummyDatabase {
       .get();
   };
 
+  verifyUser = async idToken => {
+    return await admin
+      .auth()
+      .verifyIdToken(idToken)
+      .then(function(decodedToken) {
+        return decodedToken.uid;
+      })
+      .catch(function(error) {
+        console.log(error);
+        return null;
+      });
+  };
+
   getUserDoc = async userID => {
     var usersRef = this.db.collection("users");
     var querySnapshot = await usersRef.where("user_id", "==", userID).get();
@@ -241,6 +254,21 @@ module.exports = class RummyDatabase {
       }
     }
     return false;
+  };
+
+  createUser = async (userID, name) => {
+    const userDoc = await this.getUserDoc(userID);
+    if (!userDoc) {
+      await this.db
+        .collection("users")
+        .doc(userID)
+        .set({
+          user_id: userID,
+          name: name,
+          deck_style: "default"
+        });
+    }
+    return userID;
   };
 
   createGame = async userID => {

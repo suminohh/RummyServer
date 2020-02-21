@@ -20,6 +20,12 @@ const getUrlArray = url => {
   return urlArray;
 };
 
+const createUserHandler = (res, userID, name) => {
+  rd.createUser(userID, name).then(message => {
+    res.write(message);
+    res.end();
+  });
+};
 const createGameHandler = (res, userID) => {
   rd.createGame(userID).then(gameID => {
     res.write(gameID);
@@ -56,24 +62,31 @@ const discardHandler = (res, userID, gameID, discardCard) => {
     res.end();
   });
 };
+
 const rummyHandler = (res, userID) => {
   res.write(`rummy - userID: ${userID}`);
   res.end();
 };
 
-const getUserId = async headers => {
-  var userID = headers["user_id"];
-  log(`userID:`);
-  log(userID);
+const getUserID = async headers => {
+  var IDToken = headers["id_token"];
+  var userID = null;
 
-  if (!userID) {
-    throw new Error("No User ID");
+  if (!IDToken) {
+    throw new Error("No User ID Token");
   } else {
-    //TODO: validate userID
-    var user = await rd.getUserDoc(userID);
-    if (!user) throw new Error("User doesn't exist");
+    userID = await rd.verifyUser(IDToken);
+    if (!userID) throw new Error("User doesn't exist");
   }
   return userID;
+};
+
+const getName = headers => {
+  var name = headers["name"];
+  if (!name) {
+    throw new Error("No Name");
+  }
+  return name;
 };
 
 const getGameID = headers => {
@@ -116,9 +129,21 @@ const app = express();
 app.use(cors());
 const port = 3001;
 
+app.post("/signUp", (req, res) => {
+  getUserID(req.headers)
+    .then(userID => {
+      const name = getName(req.headers);
+      res.status(200);
+      createUserHandler(res, userID, name);
+    })
+    .catch(err => {
+      res.status(400);
+      res.send(err);
+    });
+});
+
 app.post("/createGame", (req, res) => {
-  console.log(req.headers);
-  getUserId(req.headers)
+  getUserID(req.headers)
     .then(userID => {
       res.status(200);
       createGameHandler(res, userID);
@@ -130,7 +155,7 @@ app.post("/createGame", (req, res) => {
 });
 
 app.post("/joinGame", (req, res) => {
-  getUserId(req.headers)
+  getUserID(req.headers)
     .then(userID => {
       try {
         const gameID = getGameID(req.headers);
@@ -148,7 +173,7 @@ app.post("/joinGame", (req, res) => {
 });
 
 app.post("/pickupDeck", (req, res) => {
-  getUserId(req.headers)
+  getUserID(req.headers)
     .then(userID => {
       try {
         const gameID = getGameID(req.headers);
@@ -166,7 +191,7 @@ app.post("/pickupDeck", (req, res) => {
 });
 
 app.post("/pickupDiscard", (req, res) => {
-  getUserId(req.headers)
+  getUserID(req.headers)
     .then(userID => {
       try {
         const gameID = getGameID(req.headers);
@@ -185,7 +210,7 @@ app.post("/pickupDiscard", (req, res) => {
 });
 
 app.post("/playCards", (req, res) => {
-  getUserId(req.headers)
+  getUserID(req.headers)
     .then(userID => {
       try {
         const gameID = getGameID(req.headers);
@@ -205,7 +230,7 @@ app.post("/playCards", (req, res) => {
 });
 
 app.post("/discard", (req, res) => {
-  getUserId(req.headers)
+  getUserID(req.headers)
     .then(userID => {
       try {
         const gameID = getGameID(req.headers);
