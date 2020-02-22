@@ -272,10 +272,13 @@ module.exports = class RummyDatabase {
   };
 
   createGame = async userID => {
-    const userRef = (await this.getUserDoc(userID)).ref;
+    const userDoc = await this.getUserDoc(userID);
+    const userRef = userDoc.ref;
     var gameID = "MISSING";
     var gameRef = await this.db.collection("games").add({
       player1: userRef,
+      player1ID: userRef.id,
+      player1Name: userDoc.data().name,
       turn: userRef,
       game_state: GAME_STATE.setup,
       discard_pickup_card: null,
@@ -288,7 +291,8 @@ module.exports = class RummyDatabase {
   };
 
   joinGame = async (userID, gameID) => {
-    const userRef = (await this.getUserDoc(userID)).ref;
+    const userDoc = await this.getUserDoc(userID);
+    const userRef = userDoc.ref;
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
     if (!gameDoc.exists) {
@@ -300,7 +304,11 @@ module.exports = class RummyDatabase {
     if (await this.isPlayerInGame(gameDoc, userID)) {
       return "Player cannot join twice";
     }
-    await gameRef.update({ player2: userRef });
+    await gameRef.update({
+      player2: userRef,
+      player2ID: userRef.id,
+      player2Name: userDoc.data().name
+    });
     await this.createHand(gameRef, userRef);
     var deckDoc = await this.getDeckDoc(gameRef);
     var cards = deckDoc.data().cards;
