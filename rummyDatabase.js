@@ -278,7 +278,8 @@ module.exports = class RummyDatabase {
       player1: userRef,
       turn: userRef,
       game_state: GAME_STATE.setup,
-      discard_pickup_card: null
+      discard_pickup_card: null,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
     gameID = gameRef.id;
     this.createDeck(gameRef);
@@ -320,7 +321,10 @@ module.exports = class RummyDatabase {
     var firstDiscard = cards[14];
     gameRef.update({ discard: [firstDiscard] });
     await deckDoc.ref.update({ cards_used: 15 });
-    await gameRef.update({ game_state: GAME_STATE.draw });
+    await gameRef.update({
+      game_state: GAME_STATE.draw,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
     return "Success";
   };
 
@@ -342,7 +346,10 @@ module.exports = class RummyDatabase {
     handDoc.ref.update({
       cards: [...handDoc.data().cards, pickedUpCard]
     });
-    await gameDoc.ref.update({ game_state: GAME_STATE.play });
+    await gameDoc.ref.update({
+      game_state: GAME_STATE.play,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
     return "Success";
   };
 
@@ -388,7 +395,10 @@ module.exports = class RummyDatabase {
       cards: [...handDoc.data().cards, ...pickedUpCards]
     });
     await this.setDiscardPickupCard(gameDoc, pickedUpCards[0]);
-    await gameDoc.ref.update({ game_state: GAME_STATE.discardPlay });
+    await gameDoc.ref.update({
+      game_state: GAME_STATE.discardPlay,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
     return "Success";
   };
 
@@ -531,6 +541,9 @@ module.exports = class RummyDatabase {
     }
 
     await this.removeCardsFromHand(userHandDoc, orderedCards);
+    await gameRef.update({
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
     return "Success";
   };
 
@@ -560,7 +573,8 @@ module.exports = class RummyDatabase {
     await gameRef.update({
       game_state: GAME_STATE.draw,
       turn: newTurn,
-      discard: newDiscardPile
+      discard: newDiscardPile,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
     return "Success";
   };
