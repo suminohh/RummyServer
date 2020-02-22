@@ -129,7 +129,7 @@ const app = express();
 app.use(cors());
 const port = 3001;
 
-app.post("/signUp", (req, res) => {
+app.post("/signUp", async (req, res) => {
   getUserID(req.headers)
     .then(userID => {
       const name = getName(req.headers);
@@ -142,7 +142,7 @@ app.post("/signUp", (req, res) => {
     });
 });
 
-app.post("/createGame", (req, res) => {
+app.post("/createGame", async (req, res) => {
   getUserID(req.headers)
     .then(userID => {
       res.status(200);
@@ -154,7 +154,7 @@ app.post("/createGame", (req, res) => {
     });
 });
 
-app.post("/joinGame", (req, res) => {
+app.post("/joinGame", async (req, res) => {
   getUserID(req.headers)
     .then(userID => {
       try {
@@ -172,7 +172,7 @@ app.post("/joinGame", (req, res) => {
     });
 });
 
-app.post("/pickupDeck", (req, res) => {
+app.post("/pickupDeck", async (req, res) => {
   getUserID(req.headers)
     .then(userID => {
       try {
@@ -190,7 +190,7 @@ app.post("/pickupDeck", (req, res) => {
     });
 });
 
-app.post("/pickupDiscard", (req, res) => {
+app.post("/pickupDiscard", async (req, res) => {
   getUserID(req.headers)
     .then(userID => {
       try {
@@ -209,7 +209,7 @@ app.post("/pickupDiscard", (req, res) => {
     });
 });
 
-app.post("/playCards", (req, res) => {
+app.post("/playCards", async (req, res) => {
   getUserID(req.headers)
     .then(userID => {
       try {
@@ -229,7 +229,7 @@ app.post("/playCards", (req, res) => {
     });
 });
 
-app.post("/discard", (req, res) => {
+app.post("/discard", async (req, res) => {
   getUserID(req.headers)
     .then(userID => {
       try {
