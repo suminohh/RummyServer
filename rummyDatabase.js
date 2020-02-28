@@ -159,10 +159,19 @@ module.exports = class RummyDatabase {
     return userID === turnDoc.data().user_id;
   };
 
-  isPlayerInGame = async (gameDoc, userID) => {
+  isUserIDPlayer1 = async (gameDoc, userID) => {
     const player1Ref = gameDoc.data().player1;
     const player1Doc = await player1Ref.get();
     return userID === player1Doc.data().user_id;
+  };
+
+  isPlayerInGame = async (gameDoc, userID) => {
+    const player1Ref = gameDoc.data().player1;
+    const player1Doc = await player1Ref.get();
+    if (userID === player1Doc.data().user_id) return true;
+    const player2Ref = gameDoc.data().player2;
+    const player2Doc = await player2Ref.get();
+    return userID === player2Doc.data().user_id;
   };
 
   isPlayer1Turn = async gameDoc => {
@@ -302,7 +311,7 @@ module.exports = class RummyDatabase {
     if (gameDoc.data().game_state !== GAME_STATE.setup) {
       return "Game already joined";
     }
-    if (await this.isPlayerInGame(gameDoc, userID)) {
+    if (await this.isUserIDPlayer1(gameDoc, userID)) {
       return "Player cannot join twice";
     }
     await gameRef.update({
