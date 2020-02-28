@@ -38,6 +38,12 @@ const joinGameHandler = (res, userID, gameID) => {
     res.end();
   });
 };
+const deleteGameHandler = (res, userID, gameID) => {
+  rd.deleteGame(userID, gameID).then(message => {
+    res.write(message);
+    res.end();
+  });
+};
 const pickupDeckHandler = (res, userID, gameID) => {
   rd.pickupDeck(userID, gameID).then(message => {
     res.write(message);
@@ -161,6 +167,24 @@ app.post("/joinGame", async (req, res) => {
         const gameID = getGameID(req.headers);
         res.status(200);
         joinGameHandler(res, userID, gameID);
+      } catch (err) {
+        res.status(400);
+        res.send(err);
+      }
+    })
+    .catch(err => {
+      res.status(400);
+      res.send(err);
+    });
+});
+
+app.post("/deleteGame", async (req, res) => {
+  getUserID(req.headers)
+    .then(userID => {
+      try {
+        const gameID = getGameID(req.headers);
+        res.status(200);
+        deleteGameHandler(res, userID, gameID);
       } catch (err) {
         res.status(400);
         res.send(err);

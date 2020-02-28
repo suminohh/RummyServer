@@ -14,7 +14,8 @@ const GAME_STATE = {
   play: "play",
   discardPlay: "discardPlay",
   done: "done",
-  rummy: "rummy"
+  rummy: "rummy",
+  forfeit: "forfeit"
 };
 
 module.exports = class RummyDatabase {
@@ -334,6 +335,24 @@ module.exports = class RummyDatabase {
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
     return "Success";
+  };
+  deleteGame = async (userID, gameID) => {
+    const userDoc = await this.getUserDoc(userID);
+    const userRef = userDoc.ref;
+    const gameDoc = await this.getGameDoc(gameID);
+    const gameRef = gameDoc.ref;
+    if (!gameDoc.exists) {
+      return "Game not found";
+    }
+    if (await this.isPlayerInGame(gameDoc, userID)) {
+      await gameRef.update({
+        game_state: GAME_STATE.forfeit,
+        forfeiter: userRef
+      });
+      return "Success";
+    } else {
+      return "Player is not in game";
+    }
   };
 
   pickupDeck = async (userID, gameID) => {
