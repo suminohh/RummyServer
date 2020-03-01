@@ -1,7 +1,9 @@
 const Deck = require("./deck");
 var admin = require("firebase-admin");
 
-var serviceAccount = require("./rummysite_creds.json");
+var serviceAccount = require(process.env.NODE_ENV === "dev"
+  ? "./rummyHouse_creds_dev.json"
+  : "./rummyHouse_creds.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -337,7 +339,11 @@ module.exports = class RummyDatabase {
     p2HandDoc.ref.update({ cards: p2Hand });
     p1HandDoc.ref.update({ cards: p1Hand });
     var firstDiscard = cards[14];
-    gameRef.update({ discard: [firstDiscard] });
+    gameRef.update({
+      discard: [firstDiscard],
+      player1NumCards: 7,
+      player2NumCards: 7
+    });
     await deckDoc.ref.update({ cards_used: 15 });
     await gameRef.update({
       game_state: GAME_STATE.draw,

@@ -4,7 +4,7 @@
   "description": "",
   "main": "main.js",
   "scripts": {
-    "startDebug": "nodemon main.js debug",
+    "startDev": "env NODE_ENV=dev nodemon main.js debug",
     "start": "nodemon main.js"
   },
   "author": "",

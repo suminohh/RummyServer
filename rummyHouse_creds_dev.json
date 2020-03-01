@@ -1,0 +1,12 @@
+{
+  "type": "service_account",
+  "project_id": "rummyhouse-dev",
+  "private_key_id": "1764fed21649ab5cd06eccaabdd0c3bc3ed6249b",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDd5CFC0niv5Htr\n2kHN2yUvaWUgBPwmYzhbkTjXbzcpOdeOvLMid+bxWHBKrYDLxlUue9qnL+j19TNb\nxzr8RCy3ITtHYtZBUC0p3pQhsOcPgOxBvDuSbJ2ITxmD7TVkfQaEtB4SpsdlKTIN\nEHdhJdi8SL8cZgf03oVO9O+yN4/iR11jLDOmx9wbpQ3bsRriElBDy3si7RW1X/z5\nJ+D56+24cQyvToX3LRqN1lP7WrMkaChU4/Z73dVHa7NfmlacNN6n7TzvHNzG18m2\nAeXLBmrGZzN3QlXANqzgUtxAByxHfW9dHStR/Iq6tAIv0RQGG2/fY6y2cQ7y+pnu\nciyrh1s7AgMBAAECggEAUADYgzza2eSCIZ10m3H3wtP366cQeRDOOamvOnH1jA44\na9Uaq4Nax8sQ1cQgC5jrjpKGgEBUeRYbGezIFjvIeZDoTDFVOgBcAFwpwcoETYE4\n7eyd+AnkdMi8VOZamWxAxOkibKwoeY90ZeR5fpQERMLf8S/Sj5YJr7G9mN7SqI1R\nt0IfRzRdFkVlUxSA1wzODiVa1IQRvvW4iMAI8FRbHEi59mBbgXuPMD8CdVDs+ByZ\ngOKg/PDveD/tW5ITpCQ7RPUFBNzzufFNUuAqJPpRfXKyLlE2SMbs3mHPK5iByfKd\nvbcQOyWk3iI4ThMLK1FBoDk5hdpNRN0lqKAi2GCnYQKBgQDy1E4msxd2+TuQ5vzq\ntDKyUsooz57POW3sX5ZR7bY8hbbSaFTrtdI9nr1kNTtyExdTTJh8hIo8JR5pimTN\n00GUUUVsSAwxUu4984C+634FumkO8ghNTA9tYm3/UzB5QfJPyrkedKcsT6U1YMqL\n0GTRJP+ZDcreDsERYfABbYVAoQKBgQDp7RjcsxRXFjf7Q2oDwQ++2DUR7hXot2AY\nGkkcP2FrI52sFLwT+d8/Br7mLq/XK88xOUjL4W6aSSoOK6Xx2ZONUpLMKcgzYbM+\nU+8GFpSPwbU+yX9ttokt+xgeH+stOSmkpCe3fbWS5mwzK3Tqi5xhguKN/pi2V4Uq\nKo+vPhQiWwKBgDBIZI2vWIAQiHaEZ0+nqtjoO0goGDSt/5xbWUFLGcwo7jQiCJih\nm38jHBdbukkxYJbwiPVhSTcyTjzABtEiK0z5Z+ti3AHGspZg332Wx4UODqupFluA\nPyUJyENXYDEMGskgzvQuT7swzvGxIDTyp8kqKSReqLLEjkENjzJJe5BhAoGAa/aA\nngOMpLDdf3raqAbnpHYW8EKJHBHeKOGg0oeyB4e1kqEzOKj/TxBm9MehYlaW1qoQ\nngBaUpzn6whcG2YGwpfUpqO2AXjbCC4myBGN2VdWtja7OEChyXX06JpkqUeTn6gf\nqIE9VyI/19H7sPBkaWDF/TD+/FEiZZalIAUvt7cCgYEAhi7CrZUqI5So3y8LWwRu\nMS7ElWt6tFTyNMVF6EgF2HFzgawDg5d8og2WJe9LxkkRblajMV8kjcFAy5xHancT\n0Msc/5It2MzSmCcAgJ6vyRea9FLATQKAqoZwLg+y/Z2vrLSAqjLyRZAHQuAgJqJd\n7XQNTgJz9R03zr55Nd/42HA=\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-h66pp@rummyhouse-dev.iam.gserviceaccount.com",
+  "client_id": "106057343564130804471",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-h66pp%40rummyhouse-dev.iam.gserviceaccount.com"
+}
