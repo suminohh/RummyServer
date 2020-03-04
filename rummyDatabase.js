@@ -65,7 +65,9 @@ module.exports = class RummyDatabase {
   };
 
   createHand = async (gameRef, userRef) =>
-    await gameRef.collection("hands").add({ player: userRef, cards: [] });
+    await gameRef
+      .collection("hands")
+      .add({ player: userRef, playerID: userRef.id, cards: [] });
 
   getHandDocs = async gameRef => {
     return (await gameRef.collection("hands").get()).docs;
@@ -268,6 +270,21 @@ module.exports = class RummyDatabase {
     return false;
   };
 
+  getUpdatedCardInHandCount = async (gameDoc, userID, cardUpdate) => {
+    const isP1 = await isUserIDPlayer1(gameDoc, userID);
+    let cardInHandCountUpdate = {};
+    if (isP1) {
+      cardInHandCountUpdate = {
+        player1NumCards: gameDoc.data().player1NumCards + cardUpdate
+      };
+    } else {
+      cardInHandCountUpdate = {
+        player2NumCards: gameDoc.data().player2NumCards + cardUpdate
+      };
+    }
+    return cardInHandCountUpdate;
+  };
+
   createUser = async (userID, name) => {
     const userDoc = await this.getUserDoc(userID);
     if (!userDoc) {
@@ -390,7 +407,8 @@ module.exports = class RummyDatabase {
     });
     await gameDoc.ref.update({
       game_state: GAME_STATE.play,
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      ...(await getUpdatedCardInHandCount(gameDoc, userID, 1))
     });
     return "Success";
   };
@@ -439,7 +457,12 @@ module.exports = class RummyDatabase {
     await this.setDiscardPickupCard(gameDoc, pickedUpCards[0]);
     await gameDoc.ref.update({
       game_state: GAME_STATE.discardPlay,
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      ...(await getUpdatedCardInHandCount(
+        gameDoc,
+        userID,
+        pickedUpCards.length
+      ))
     });
     return "Success";
   };
@@ -584,7 +607,8 @@ module.exports = class RummyDatabase {
 
     await this.removeCardsFromHand(userHandDoc, orderedCards);
     await gameRef.update({
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      ...(await getUpdatedCardInHandCount(gameDoc, userID, cards.length))
     });
     return "Success";
   };
@@ -616,7 +640,8 @@ module.exports = class RummyDatabase {
       game_state: GAME_STATE.draw,
       turn: newTurn,
       discard: newDiscardPile,
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      ...(await getUpdatedCardInHandCount(gameDoc, userID, 1))
     });
     return "Success";
   };
