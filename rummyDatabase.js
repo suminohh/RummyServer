@@ -116,16 +116,26 @@ module.exports = class RummyDatabase {
   ) => {
     return await gameRef.collection("sets").add({
       player: userRef,
+      player_id: userRef.id,
       cards: cards,
       set_type: setType,
       same_suit_continued_set: sameSuitContinuedSetDoc
         ? sameSuitContinuedSetDoc.ref
         : null,
+      same_suit_continued_set_id: sameSuitContinuedSetDoc
+        ? sameSuitContinuedSetDoc.ref.id
+        : null,
       straight_continued_set_below: straightContinuedSetDocBelow
         ? straightContinuedSetDocBelow.ref
         : null,
+      straight_continued_set_below_id: straightContinuedSetDocBelow
+        ? straightContinuedSetDocBelow.ref.id
+        : null,
       straight_continued_set_above: straightContinuedSetDocAbove
         ? straightContinuedSetDocAbove.ref
+        : null,
+      straight_continued_set_above_id: straightContinuedSetDocAbove
+        ? straightContinuedSetDocAbove.ref.id
         : null
     });
   };
