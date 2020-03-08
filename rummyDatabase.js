@@ -96,11 +96,15 @@ module.exports = class RummyDatabase {
   };
 
   removeCardsFromHand = async (handDoc, cards) => {
-    var newCardsInHand = handDoc.data().cards;
+    console.log("removing cards");
+    console.log(cards);
+    var newCardsInHand = [...handDoc.data().cards];
     cards.forEach(card => {
       const cardInHandIndex = newCardsInHand.indexOf(card);
       newCardsInHand.splice(cardInHandIndex, 1);
     });
+
+    console.log(newCardsInHand);
 
     await handDoc.ref.update({ cards: newCardsInHand });
   };
@@ -119,10 +123,10 @@ module.exports = class RummyDatabase {
       player_id: userRef.id,
       cards: cards,
       set_type: setType,
-      same_suit_continued_set: sameSuitContinuedSetDoc
+      same_value_continued_set: sameSuitContinuedSetDoc
         ? sameSuitContinuedSetDoc.ref
         : null,
-      same_suit_continued_set_id: sameSuitContinuedSetDoc
+      same_value_continued_set_id: sameSuitContinuedSetDoc
         ? sameSuitContinuedSetDoc.ref.id
         : null,
       straight_continued_set_below: straightContinuedSetDocBelow
@@ -570,7 +574,10 @@ module.exports = class RummyDatabase {
             setDoc,
             null
           );
-          setDoc.ref.update({ straight_continued_set_above: newSetRef });
+          setDoc.ref.update({
+            straight_continued_set_above: newSetRef,
+            straight_continued_set_above_id: newSetRef.id
+          });
         } else if (cardCompare === 1) {
           if (setDoc.data().straight_continued_set_below) {
             return "Set is already continued downward";
@@ -584,12 +591,15 @@ module.exports = class RummyDatabase {
             null,
             setDoc
           );
-          setDoc.ref.update({ straight_continued_set_below: newSetRef });
+          setDoc.ref.update({
+            straight_continued_set_below: newSetRef,
+            straight_continued_set_below_id: newSetRef.id
+          });
         } else {
           return `unknown error`;
         }
       } else {
-        if (setDoc.data().same_suit_continued_set) {
+        if (setDoc.data().same_value_continued_set) {
           return "Set is already continued";
         }
         const newSetRef = await this.createSet(
@@ -601,7 +611,10 @@ module.exports = class RummyDatabase {
           null,
           null
         );
-        setDoc.ref.update({ same_suit_continued_set: newSetRef });
+        setDoc.ref.update({
+          same_value_continued_set: newSetRef,
+          same_value_continued_set_id: newSetRef.id
+        });
       }
     } else {
       await this.createSet(
@@ -615,7 +628,7 @@ module.exports = class RummyDatabase {
       );
     }
 
-    await this.removeCardsFromHand(userHandDoc, orderedCards);
+    await this.removeCardsFromHand(userHandDoc, cards);
     await gameRef.update({
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       ...(await this.getUpdatedCardInHandCount(gameDoc, userID, cards.length))

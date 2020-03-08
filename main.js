@@ -237,6 +237,7 @@ app.post("/playCards", async (req, res) => {
   getUserID(req.headers)
     .then(userID => {
       try {
+        console.log(req.headers);
         const gameID = getGameID(req.headers);
         const cards = getCards(req.headers);
         const continuedSetID = getContinuedSetID(req.headers);
