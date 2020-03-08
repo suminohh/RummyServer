@@ -6,8 +6,7 @@ var serviceAccount = require(process.env.NODE_ENV === "dev"
   : "./rummyHouse_creds.json");
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://rummysite-e9ddf.firebaseio.com"
+  credential: admin.credential.cert(serviceAccount)
 });
 
 const GAME_STATE = {
@@ -648,7 +647,11 @@ module.exports = class RummyDatabase {
     await this.removeCardsFromHand(userHandDoc, cards);
     await gameRef.update({
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      ...(await this.getUpdatedCardInHandCount(gameDoc, userID, cards.length))
+      ...(await this.getUpdatedCardInHandCount(
+        gameDoc,
+        userID,
+        cards.length * -1
+      ))
     });
     return "Success";
   };
@@ -681,7 +684,7 @@ module.exports = class RummyDatabase {
       turn: newTurn,
       discard: newDiscardPile,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      ...(await this.getUpdatedCardInHandCount(gameDoc, userID, 1))
+      ...(await this.getUpdatedCardInHandCount(gameDoc, userID, -1))
     });
     return "Success";
   };
