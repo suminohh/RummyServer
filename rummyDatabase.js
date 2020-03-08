@@ -274,10 +274,14 @@ module.exports = class RummyDatabase {
     return false;
   };
 
-  canDiscardBeUsedAsRummy = (playedSetDocs, discardCard) => {
+  canDiscardBeUsedAsRummy = (playedSetDocs, discardCards) => {
     for (var j = 0; j < playedSetDocs.length; j++) {
       const playedCards = playedSetDocs[j].data().cards;
-      if (Deck.potentialTypeOfSet([...playedCards, discardCard], true)[0]) {
+      if (Deck.potentialTypeOfSet([...playedCards, discardCards[0]], true)[0]) {
+        return true;
+      } else if (
+        Deck.potentialTypeOfSet([...discardCards.slice(1), discardCards[0]])
+      ) {
         return true;
       }
     }
@@ -435,26 +439,31 @@ module.exports = class RummyDatabase {
     const pickedUpCards = discard.slice(discardPickupIndex);
     const isRummyPickup = this.canDiscardBeUsedAsRummy(
       playedSetDocs,
-      pickedUpCards[0]
+      pickedUpCards
     );
     // TODO: figure out best way to tackle rummy situation
-    // if (!isRummyPickup) {
-    if (!(await this.isPlayersTurn(gameDoc, userID))) {
-      return "Not your turn";
+    if (!isRummyPickup) {
+      if (!(await this.isPlayersTurn(gameDoc, userID))) {
+        return "Not your turn";
+      }
+      if (gameDoc.data().game_state !== GAME_STATE.draw) {
+        return "Cannot draw now";
+      }
+    } else {
+      var handDoc = await this.getHandDocForUser(gameDoc.ref, userRef);
+      console.log("rummy");
+      const remainingDiscard = discard.slice(0, discardPickupIndex);
+      gameDoc.ref.update({ discard: remainingDiscard });
+      handDoc.ref.update({
+        cards: [...handDoc.data().cards, ...pickedUpCards]
+      });
+      await gameDoc.ref.update({
+        game_state: GAME_STATE.rummy,
+        rummy_turn: userRef,
+        rummy_turn_id: userRef.id
+      });
+      return "Rummy";
     }
-    if (gameDoc.data().game_state !== GAME_STATE.draw) {
-      return "Cannot draw now";
-    }
-    // } else {
-    //   console.log("rummy");
-    //   const remainingDiscard = discard.slice(0, discardPickupIndex);
-    //   gameDoc.ref.update({ discard: remainingDiscard });
-    //   handDoc.ref.update({
-    //     cards: [...handDoc.data().cards, ...pickedUpCards]
-    //   });
-    //   await gameDoc.ref.update({ game_state: GAME_STATE.rummy });
-    //   return "Rummy";
-    // }
     var handDoc = await this.getHandDocForUser(gameDoc.ref, userRef);
     const isDiscardPickupAllowed = this.canDiscardBeUsed(
       handDoc,
@@ -485,14 +494,22 @@ module.exports = class RummyDatabase {
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
-    if (!(await this.isPlayersTurn(gameDoc, userID))) {
+    let rummyPlay = false;
+    if (
+      !(await this.isPlayersTurn(gameDoc, userID)) &&
+      !(gameDoc.data().rummy_turn === userRef)
+    ) {
       return "Not your turn";
     }
     if (
       gameDoc.data().game_state !== GAME_STATE.play &&
       gameDoc.data().game_state !== GAME_STATE.discardPlay
     ) {
-      return "Cannot play cards now";
+      if (gameDoc.data().game_state !== GAME_STATE.rummy) {
+        rummyPlay = true;
+      } else {
+        return "Cannot play cards now";
+      }
     }
     const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
     if (!this.areCardsInHand(userHandDoc, cards)) {
