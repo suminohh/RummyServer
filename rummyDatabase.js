@@ -224,6 +224,7 @@ module.exports = class RummyDatabase {
   };
 
   getPotentialDiscardSetsUsingHand = (handDoc, discardCard) => {
+    // does not work for cases where user needs 2 cards from discard
     const cardsInHandPowerSet = this.powerSet(handDoc.data().cards).map(set => [
       ...set,
       discardCard
@@ -234,6 +235,7 @@ module.exports = class RummyDatabase {
         potentialCardSets.push(cardsInHandPowerSet[i]);
       }
     }
+    console.log(potentialCardSets);
     return potentialCardSets;
   };
 
@@ -274,17 +276,23 @@ module.exports = class RummyDatabase {
   };
 
   canDiscardBeUsedAsRummy = (playedSetDocs, discardCards) => {
+    // TODO: Use playcards to check if rummy can happen
+    // see if card being picked up could be used with a played card set
+    // must validate that the potential played set is valid
+    // (i.e. not allowing 3H 4H played on 2H that is a linked card to a same value set)
+    const rummySets = [];
+    const firstCard = discardCards[0];
+    const discardPowerSet = discardCards.slice(1);
+
     for (var j = 0; j < playedSetDocs.length; j++) {
       const playedCards = playedSetDocs[j].data().cards;
       if (Deck.potentialTypeOfSet([...playedCards, discardCards[0]], true)[0]) {
-        return true;
-      } else if (
-        Deck.potentialTypeOfSet([...discardCards.slice(1), discardCards[0]])
-      ) {
-        return true;
+        rummySets.push([...playedCards, discardCards[0]]);
       }
+      //must check if first discard + 1 discard or more could be used with a played set
     }
-    return false;
+    //must check if cards alone in the discard are a rummy
+    return rummySets.length > 0;
   };
 
   getUpdatedCardInHandCount = async (gameDoc, userID, cardUpdate) => {
@@ -336,6 +344,8 @@ module.exports = class RummyDatabase {
     return gameID;
   };
 
+  // TODO:
+  // throw errors rather than good responses
   joinGame = async (userID, gameID) => {
     const userDoc = await this.getUserDoc(userID);
     const userRef = userDoc.ref;
@@ -385,6 +395,9 @@ module.exports = class RummyDatabase {
     });
     return "Success";
   };
+
+  // TODO:
+  // throw errors rather than good responses
   deleteGame = async (userID, gameID) => {
     const userDoc = await this.getUserDoc(userID);
     const userRef = userDoc.ref;
@@ -404,6 +417,8 @@ module.exports = class RummyDatabase {
     }
   };
 
+  // TODO:
+  // throw errors rather than good responses
   pickupDeck = async (userID, gameID) => {
     const userDoc = await this.getUserDoc(userID);
     const gameDoc = await this.getGameDoc(gameID);
@@ -430,6 +445,11 @@ module.exports = class RummyDatabase {
     return "Success";
   };
 
+  // TODO:
+  // throw errors rather than good responses
+  // fix determining if pickup is okay
+  // start rummy flow if rummy is happening
+  // set rummy player if rummy
   pickupDiscard = async (userID, gameID, discardPickupIndex) => {
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
@@ -456,6 +476,11 @@ module.exports = class RummyDatabase {
       handDoc.ref.update({
         cards: [...handDoc.data().cards, ...pickedUpCards]
       });
+      await this.getUpdatedCardInHandCount(
+        gameDoc,
+        userID,
+        pickedUpCards.length
+      );
       await gameDoc.ref.update({
         game_state: GAME_STATE.rummy,
         rummy_turn: userRef,
@@ -489,37 +514,41 @@ module.exports = class RummyDatabase {
     return "Success";
   };
 
-  playCards = async (userID, gameID, cards, continuedSetID) => {
+  // TODO:
+  // throw errors rather than good responses
+  // work with rummy
+  // remove rummy player if rummy and play happens
+  playCards = async (userID, gameID, cards, continuedSetID, dry = false) => {
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
     let rummyPlay = false;
-    if (
-      !(await this.isPlayersTurn(gameDoc, userID)) &&
-      !(gameDoc.data().rummy_turn === userRef)
-    ) {
-      return "Not your turn";
-    }
-    if (
-      gameDoc.data().game_state !== GAME_STATE.play &&
-      gameDoc.data().game_state !== GAME_STATE.discardPlay
-    ) {
-      if (gameDoc.data().game_state !== GAME_STATE.rummy) {
-        rummyPlay = true;
-      } else {
-        return "Cannot play cards now";
+    if (!dry) {
+      if (
+        !(await this.isPlayersTurn(gameDoc, userID)) &&
+        !(gameDoc.data().rummy_turn === userRef)
+      ) {
+        return "Not your turn";
+      }
+      if (
+        gameDoc.data().game_state !== GAME_STATE.play &&
+        gameDoc.data().game_state !== GAME_STATE.discardPlay
+      ) {
+        if (gameDoc.data().game_state !== GAME_STATE.rummy) {
+          rummyPlay = true;
+        } else {
+          return "Cannot play cards now";
+        }
       }
     }
     const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
-    if (!this.areCardsInHand(userHandDoc, cards)) {
+
+    if (!dry && !this.areCardsInHand(userHandDoc, cards)) {
       return "Card(s) not in your hand";
     }
     var discardPickupCard = await this.getDiscardPickupCard(gameDoc);
-    if (discardPickupCard) {
-      if (cards.indexOf(discardPickupCard) != -1) {
-        await this.setDiscardPickupCard(gameDoc, null);
-        await gameRef.update({ game_state: GAME_STATE.play });
-      } else {
+    if (discardPickupCard && !dry) {
+      if (!cards.indexOf(discardPickupCard) != -1) {
         return `Must play the ${discardPickupCard} in a set before any other set`;
       }
     }
@@ -548,7 +577,7 @@ module.exports = class RummyDatabase {
         setDoc.data().set_type !== potentialSet[1] &&
         potentialSet[1] !== "Wild"
       ) {
-        return `Cannot play off of selected set becase it is not a ${potentialSet[1]} set`;
+        return `Cannot play off of selected set because it is not a ${potentialSet[1]} set`;
       }
       if (potentialSet[1] === "Straight" || potentialSet[1] === "Wild") {
         cardCompare = Deck.compareCards(
@@ -581,36 +610,40 @@ module.exports = class RummyDatabase {
           if (setDoc.data().straight_continued_set_above) {
             return "Set is already continued upward";
           }
-          const newSetRef = await this.createSet(
-            gameRef,
-            userRef,
-            orderedCards,
-            "Straight",
-            null,
-            setDoc,
-            null
-          );
-          setDoc.ref.update({
-            straight_continued_set_above: newSetRef,
-            straight_continued_set_above_id: newSetRef.id
-          });
+          if (!dry) {
+            const newSetRef = await this.createSet(
+              gameRef,
+              userRef,
+              orderedCards,
+              "Straight",
+              null,
+              setDoc,
+              null
+            );
+            setDoc.ref.update({
+              straight_continued_set_above: newSetRef,
+              straight_continued_set_above_id: newSetRef.id
+            });
+          }
         } else if (cardCompare === 1) {
           if (setDoc.data().straight_continued_set_below) {
             return "Set is already continued downward";
           }
-          const newSetRef = await this.createSet(
-            gameRef,
-            userRef,
-            orderedCards,
-            "Straight",
-            null,
-            null,
-            setDoc
-          );
-          setDoc.ref.update({
-            straight_continued_set_below: newSetRef,
-            straight_continued_set_below_id: newSetRef.id
-          });
+          if (!dry) {
+            const newSetRef = await this.createSet(
+              gameRef,
+              userRef,
+              orderedCards,
+              "Straight",
+              null,
+              null,
+              setDoc
+            );
+            setDoc.ref.update({
+              straight_continued_set_below: newSetRef,
+              straight_continued_set_below_id: newSetRef.id
+            });
+          }
         } else {
           return `unknown error`;
         }
@@ -618,44 +651,56 @@ module.exports = class RummyDatabase {
         if (setDoc.data().same_value_continued_set) {
           return "Set is already continued";
         }
-        const newSetRef = await this.createSet(
+        if (!dry) {
+          const newSetRef = await this.createSet(
+            gameRef,
+            userRef,
+            cards,
+            "Same Value",
+            setDoc,
+            null,
+            null
+          );
+          setDoc.ref.update({
+            same_value_continued_set: newSetRef,
+            same_value_continued_set_id: newSetRef.id
+          });
+        }
+      }
+    } else {
+      if (!dry) {
+        await this.createSet(
           gameRef,
           userRef,
-          cards,
-          "Same Value",
-          setDoc,
+          potentialSet[1] == "Straight" ? orderedCards : cards,
+          potentialSet[1],
+          null,
           null,
           null
         );
-        setDoc.ref.update({
-          same_value_continued_set: newSetRef,
-          same_value_continued_set_id: newSetRef.id
-        });
       }
-    } else {
-      await this.createSet(
-        gameRef,
-        userRef,
-        potentialSet[1] == "Straight" ? orderedCards : cards,
-        potentialSet[1],
-        null,
-        null,
-        null
-      );
     }
 
-    await this.removeCardsFromHand(userHandDoc, cards);
-    await gameRef.update({
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      ...(await this.getUpdatedCardInHandCount(
-        gameDoc,
-        userID,
-        cards.length * -1
-      ))
-    });
+    if (!dry) {
+      if (discardPickupCard) {
+        await this.setDiscardPickupCard(gameDoc, null);
+        await gameRef.update({ game_state: GAME_STATE.play });
+      }
+      await this.removeCardsFromHand(userHandDoc, cards);
+      await gameRef.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        ...(await this.getUpdatedCardInHandCount(
+          gameDoc,
+          userID,
+          cards.length * -1
+        ))
+      });
+    }
     return "Success";
   };
 
+  // TODO:
+  // throw errors rather than good responses
   discard = async (userID, gameID, card) => {
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);

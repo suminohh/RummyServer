@@ -1,6 +1,7 @@
 const express = require("express");
 var cors = require("cors");
 const RummyDatabase = require("./rummyDatabase");
+const Deck = require("./deck");
 
 var rd = new RummyDatabase();
 
@@ -104,8 +105,9 @@ const getGameID = headers => {
 };
 
 const getDiscardPickupIndex = headers => {
-  var discardPickupIndex = headers["discard_pickup_index"];
-  if (!discardPickupIndex) {
+  var discardPickupIndex = parseInt(headers["discard_pickup_index"]);
+  if (isNaN(discardPickupIndex)) {
+    console.log("here");
     throw new Error("No discard pickup index");
   }
   return discardPickupIndex;
@@ -113,10 +115,22 @@ const getDiscardPickupIndex = headers => {
 
 const getCards = headers => {
   var cards = headers["cards"];
+  try {
+    var cards = JSON.parse(headers["cards"]);
+    console.log(cards);
+  } catch (err) {
+    console.log(err.message);
+    throw new Error("No cards to play");
+  }
   if (!cards || cards.length < 1) {
     throw new Error("No cards to play");
   }
-  return JSON.parse(cards);
+  for (let i = 0; i < cards.length; i += 1) {
+    if (!Deck.isCard(cards[i])) {
+      throw new Error("Invalid card");
+    }
+  }
+  return cards;
 };
 
 const getContinuedSetID = headers => {
@@ -125,7 +139,7 @@ const getContinuedSetID = headers => {
 
 const getDiscardCard = headers => {
   var discardCard = headers["discard_card"];
-  if (!discardCard) {
+  if (!discardCard || !Deck.isCard(discardCard)) {
     throw new Error("No card to discard");
   }
   return discardCard;
@@ -144,7 +158,7 @@ app.post("/signUp", async (req, res) => {
     })
     .catch(err => {
       res.status(400);
-      res.send(err);
+      res.send(err.message);
     });
 });
 
@@ -156,7 +170,7 @@ app.post("/createGame", async (req, res) => {
     })
     .catch(err => {
       res.status(400);
-      res.send(err);
+      res.send(err.message);
     });
 });
 
@@ -169,12 +183,12 @@ app.post("/joinGame", async (req, res) => {
         joinGameHandler(res, userID, gameID);
       } catch (err) {
         res.status(400);
-        res.send(err);
+        res.send(err.message);
       }
     })
     .catch(err => {
       res.status(400);
-      res.send(err);
+      res.send(err.message);
     });
 });
 
@@ -187,12 +201,12 @@ app.post("/deleteGame", async (req, res) => {
         deleteGameHandler(res, userID, gameID);
       } catch (err) {
         res.status(400);
-        res.send(err);
+        res.send(err.message);
       }
     })
     .catch(err => {
       res.status(400);
-      res.send(err);
+      res.send(err.message);
     });
 });
 
@@ -205,12 +219,12 @@ app.post("/pickupDeck", async (req, res) => {
         pickupDeckHandler(res, userID, gameID);
       } catch (err) {
         res.status(400);
-        res.send(err);
+        res.send(err.message);
       }
     })
     .catch(err => {
       res.status(400);
-      res.send(err);
+      res.send(err.message);
     });
 });
 
@@ -224,12 +238,12 @@ app.post("/pickupDiscard", async (req, res) => {
         pickupDiscardHandler(res, userID, gameID, discardPickupIndex);
       } catch (err) {
         res.status(400);
-        res.send(err);
+        res.send(err.message);
       }
     })
     .catch(err => {
       res.status(400);
-      res.send(err);
+      res.send(err.message);
     });
 });
 
@@ -245,12 +259,12 @@ app.post("/playCards", async (req, res) => {
         playCardsHandler(res, userID, gameID, cards, continuedSetID);
       } catch (err) {
         res.status(400);
-        res.send(err);
+        res.send(err.message);
       }
     })
     .catch(err => {
       res.status(400);
-      res.send(err);
+      res.send(err.message);
     });
 });
 
@@ -264,12 +278,12 @@ app.post("/discard", async (req, res) => {
         discardHandler(res, userID, gameID, discardCard);
       } catch (err) {
         res.status(400);
-        res.send(err);
+        res.send(err.message);
       }
     })
     .catch(err => {
       res.status(400);
-      res.send(err);
+      res.send(err.message);
     });
 });
 

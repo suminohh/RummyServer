@@ -132,4 +132,8 @@ module.exports = class Deck {
     }
     return 0;
   }
+
+  static isCard(potentialCard) {
+    return cards.indexOf(potentialCard) > -1;
+  }
 };
