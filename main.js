@@ -70,9 +70,11 @@ const discardHandler = (res, userID, gameID, discardCard) => {
   });
 };
 
-const rummyHandler = (res, userID) => {
-  res.write(`rummy - userID: ${userID}`);
-  res.end();
+const rummyHandler = (res, userID, possibleRummyID) => {
+  rd.rummy(userID, gameID, possibleRummyID).then(message => {
+    res.write(message);
+    res.end();
+  });
 };
 
 const getUserID = async headers => {
@@ -135,6 +137,10 @@ const getCards = headers => {
 
 const getContinuedSetID = headers => {
   return headers["continued_set_id"];
+};
+
+const getPossibleRummyID = headers => {
+  return headers["possible_rummy_id"];
 };
 
 const getDiscardCard = headers => {
@@ -257,6 +263,26 @@ app.post("/playCards", async (req, res) => {
         const continuedSetID = getContinuedSetID(req.headers);
         res.status(200);
         playCardsHandler(res, userID, gameID, cards, continuedSetID);
+      } catch (err) {
+        res.status(400);
+        res.send(err.message);
+      }
+    })
+    .catch(err => {
+      res.status(400);
+      res.send(err.message);
+    });
+});
+
+app.post("/rummy", async (req, res) => {
+  getUserID(req.headers)
+    .then(userID => {
+      try {
+        console.log(req.headers);
+        const gameID = getGameID(req.headers);
+        const possibleRummyID = getPossibleRummyID(req.headers);
+        res.status(200);
+        rummyHandler(res, userID, gameID, possibleRummyID);
       } catch (err) {
         res.status(400);
         res.send(err.message);

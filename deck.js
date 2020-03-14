@@ -92,39 +92,6 @@ module.exports = class Deck {
     return [false, "Random cards", []];
   }
 
-  // static potentialTypeOfSet(cards, isContinuing) {
-  //   var cardValues = new Set();
-  //   var cardSuits = new Set();
-  //   var cardsSet = new Set();
-  //   var fakeSuit = false;
-  //   var fakeValue = false;
-  //   cards.forEach(card => {
-  //     const cardParts = card.split(" ");
-  //     if (values.indexOf(cardParts[0]) === -1) fakeValue = true;
-  //     if (suits.indexOf(cardParts[2]) === -1) fakeSuit = true;
-  //     cardsSet.add(card);
-  //     cardValues.add(cardParts[0]);
-  //     cardSuits.add(cardParts[2]);
-  //   });
-  //   if (cards.length < 3 && !isContinuing) return [false, "Not enough cards"];
-  //   if (cards.length === 1 && isContinuing) return [true, "Wild"];
-  //   if (fakeValue || fakeSuit) return [false, "Invalid suit or value"];
-  //   if (cardsSet.size != cards.length) return [false, "Duplicate card"];
-  //   if (
-  //     cardSuits.size === 1 &&
-  //     cardValues.size === cards.length &&
-  //     cards.length <= 13
-  //   )
-  //     return [true, "Straight"];
-  //   if (
-  //     cardSuits.size === cards.length &&
-  //     cardValues.size === 1 &&
-  //     cards.length <= 4
-  //   )
-  //     return [true, "Same Value"];
-  //   return [false, "Random cards"];
-  // }
-
   static orderStraight(cards, aceLast) {
     var orderedCards = [...cards];
     orderedCards.sort((a, b) => this.compareCards(a, b, aceLast));
