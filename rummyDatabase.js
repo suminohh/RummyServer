@@ -628,59 +628,60 @@ module.exports = class RummyDatabase {
         return `Must play the ${discardPickupCard} in a set before any other set`;
       }
     }
-    var orderedCards = [];
-    // TODO: This will fail if <3 cards, which shouldn't always fail- ex playing 1 card off of another set
-    // maybe don't check just the cards unless there isn't a continued set.
     var potentialSet = Deck.potentialTypeOfSet(cards, !!continuedSetID);
-    if (!potentialSet[0] && !continuedSetID) return potentialSet[1];
-    if (potentialSet[1] == "Straight") {
-      var isValidStraight = Deck.validateStraight(cards);
-      if (!isValidStraight[0]) return "Invalid Straight";
-      orderedCards = isValidStraight[1];
-    } else if (potentialSet[1] == "Wild") {
-      orderedCards = [...cards];
+    // returns a failure message here
+    if (!potentialSet[0] && !continuedSetID) {
+      return potentialSet[1];
     }
 
-    var allCards = [...cards];
+    var orderedCards = potentialSet[2];
 
-    var setDoc = null;
-    var continuedCards = [];
-    var cardCompare = 0;
+    // if continuing a set, more work must be done
     if (continuedSetID) {
-      setDoc = await this.getSetDoc(gameRef, continuedSetID);
-      continuedCards = setDoc.data().cards;
+      var allCards = [...cards];
+      var setDoc = await this.getSetDoc(gameRef, continuedSetID);
+      var continuedCards = setDoc.data().cards;
+      var cardCompare = 0;
+
+      // Continuation and playing cards set type don't match, return error
       if (
         setDoc.data().set_type !== potentialSet[1] &&
         potentialSet[1] !== "Wild"
       ) {
         return `Cannot play off of selected set because it is not a ${potentialSet[1]} set`;
       }
+
+      // If playing a straight, or "wild" have to validate it can be used on the continued set
       if (potentialSet[1] === "Straight" || potentialSet[1] === "Wild") {
         cardCompare = Deck.compareCards(
           continuedCards[0],
           orderedCards[orderedCards.length - 1]
         );
+        // either -1 or 1 to determine if it will be traversing up or down
         if (cardCompare !== 0) {
           allCards = await this.traverseSets(
             cardCompare === 1,
             setDoc,
             orderedCards
           );
-        } else if (potentialSet[1] !== "Wild") {
-          return `Cannot play off of selected because the straight is invalid`;
+        } else {
+          if (potentialSet[1] !== "Wild") {
+            return `Cannot play off of selected because the straight is invalid`;
+          } else {
+            // cards should be same value
+            allCards = [cards[0], ...continuedCards];
+          }
         }
-        if (potentialSet[1] === "Wild" && cardCompare === 0) {
-          allCards = [cards[0], ...continuedCards];
-        }
-      }
-      var potentialFullSet = Deck.potentialTypeOfSet(allCards);
-      if (!potentialFullSet[0])
-        return `Cards selected from hand are a ${potentialSet[1]}, but cannot be attached to the played set because: ${potentialFullSet[1]}`;
-      if (potentialFullSet[1] == "Straight") {
-        var isValidStraight = Deck.validateStraight(allCards);
-        if (!isValidStraight[0]) return "Invalid Straight";
       }
 
+      var potentialFullSet = Deck.potentialTypeOfSet(allCards);
+
+      // bad full set, return error
+      if (!potentialFullSet[0]) {
+        return `Cards selected from hand are a ${potentialSet[1]}, but cannot be attached to the played set because: ${potentialFullSet[1]}`;
+      }
+
+      // full set is potentially a straight set
       if (potentialFullSet[1] == "Straight") {
         if (cardCompare === -1) {
           if (setDoc.data().straight_continued_set_above) {
@@ -720,6 +721,7 @@ module.exports = class RummyDatabase {
           return `unknown error`;
         }
       } else {
+        // full set is potentially a one of a value set
         if (setDoc.data().same_value_continued_set) {
           return "Set is already continued";
         }
@@ -738,10 +740,11 @@ module.exports = class RummyDatabase {
         });
       }
     } else {
+      // not continuing a set, can just create a valid set
       await this.createSet(
         gameRef,
         userRef,
-        potentialSet[1] == "Straight" ? orderedCards : cards,
+        orderedCards,
         potentialSet[1],
         null,
         null,
