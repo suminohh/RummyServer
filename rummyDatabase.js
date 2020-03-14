@@ -601,29 +601,23 @@ module.exports = class RummyDatabase {
   // throw errors rather than good responses
   // work with rummy
   // remove rummy player if rummy and play happens
-  // TODO: update use of potential type of set
+  // update use of potential type of set
+  // FIX THIS MESS
   playCards = async (userID, gameID, cards, continuedSetID) => {
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
-    let rummyPlay = false;
-    if (
-      !(await this.isPlayersTurn(gameDoc, userID)) &&
-      !(gameDoc.data().rummy_turn === userRef)
-    ) {
+    const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
+
+    if (!(await this.isPlayersTurn(gameDoc, userID))) {
       return "Not your turn";
     }
     if (
       gameDoc.data().game_state !== GAME_STATE.play &&
       gameDoc.data().game_state !== GAME_STATE.discardPlay
     ) {
-      if (gameDoc.data().game_state !== GAME_STATE.rummy) {
-        rummyPlay = true;
-      } else {
-        return "Cannot play cards now";
-      }
+      return "Cannot play cards now";
     }
-    const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
 
     if (!this.areCardsInHand(userHandDoc, cards)) {
       return "Card(s) not in your hand";
