@@ -53,7 +53,7 @@ module.exports = class Deck {
     this.cardsUsed = 0;
   }
 
-  static validateSet(cards, isContinuing) {
+  static validateSet(cards, isContinuing, continueType = undefined) {
     var cardValues = new Set();
     var cardSuits = new Set();
     var cardsSet = new Set();
@@ -77,7 +77,10 @@ module.exports = class Deck {
       cards.length <= 13
     ) {
       const isValidArray = this.validateStraight(Array.from(cardsSet));
-      if (isValidArray[0]) {
+      if (
+        isValidArray[0] &&
+        ((isContinuing && continueType === "Straight") || !isContinuing)
+      ) {
         return [true, "Straight", isValidArray[1]];
       }
       return [false, "Random cards", []];
@@ -86,7 +89,8 @@ module.exports = class Deck {
     if (
       cardSuits.size === cards.length &&
       cardValues.size === 1 &&
-      cards.length <= 4
+      cards.length <= 4 &&
+      ((isContinuing && continueType === "Same Value") || !isContinuing)
     )
       return [true, "Same Value", cards];
     return [false, "Random cards", []];

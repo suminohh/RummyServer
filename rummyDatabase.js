@@ -201,6 +201,13 @@ module.exports = class RummyDatabase {
       .get();
   };
 
+  getPossibleRummyDoc = async (gameRef, possibleRummyID) => {
+    return await gameRef
+      .collection("possible_rummies")
+      .doc(possibleRummyID)
+      .get();
+  };
+
   traverseSets = async (upwards, setDoc, cards) => {
     var setCards = [...cards, ...setDoc.data().cards];
     if (upwards) {
@@ -314,7 +321,8 @@ module.exports = class RummyDatabase {
       for (let j = 0; j < playedSets.length; j += 1) {
         let validatedDiscardAndPlayedData = Deck.validateSet(
           [...discardCombination, ...playedSets[j]],
-          true
+          true,
+          playedSetDocs[j].data().set_type
         );
         if (
           validatedDiscardAndPlayedData[0] &&
@@ -352,7 +360,8 @@ module.exports = class RummyDatabase {
         for (let k = 0; k < playedSets.length; k += 1) {
           let validatedDiscardPlayedAndHandData = Deck.validateSet(
             [...discardCombination, ...playedSets[k], ...handCombination],
-            true
+            true,
+            playedSetDocs[k].data().set_type
           );
           if (
             validatedDiscardPlayedAndHandData[0] &&
@@ -569,7 +578,8 @@ module.exports = class RummyDatabase {
           rummy_player: userRef,
           rummy_player_id: userRef.id,
           game_state: GAME_STATE.rummy,
-          rummy_index: discardPickupIndex
+          rummy_index: discardPickupIndex,
+          game_revert_state: gameDoc.data().game_state
         });
         return "Rummy";
       } else {
@@ -628,7 +638,7 @@ module.exports = class RummyDatabase {
         return `Must play the ${discardPickupCard} in a set before any other set`;
       }
     }
-    var potentialSet = Deck.potentialTypeOfSet(cards, !!continuedSetID);
+    var potentialSet = Deck.validateSet(cards, !!continuedSetID);
     // returns a failure message here
     if (!potentialSet[0] && !continuedSetID) {
       return potentialSet[1];
@@ -674,7 +684,7 @@ module.exports = class RummyDatabase {
         }
       }
 
-      var potentialFullSet = Deck.potentialTypeOfSet(allCards);
+      var potentialFullSet = Deck.validateSet(allCards);
 
       // bad full set, return error
       if (!potentialFullSet[0]) {
@@ -783,14 +793,115 @@ module.exports = class RummyDatabase {
     }
     if (possibleRummyID) {
       // TODO: play rummy based off of set chosen by user
+      const rummyDoc = await this.getPossibleRummyDoc(gameRef, possibleRummyID);
+      const discardsPlay = rummyDoc.data().discards_play;
+      const discardsKeep = rummyDoc.data().discards_keep;
+      const setDoc = await this.getSetDoc(gameRef, rummyDoc.data().setID);
+      const cardCompare = Deck.compareCards(
+        setDoc.data().cards[0],
+        discardsPlay[discardsPlay.length - 1]
+      );
+      let errorMessage = "";
+      if (cardCompare === -1) {
+        if (setDoc.data().straight_continued_set_above) {
+          errorMessage = "Set is already continued upward";
+        } else {
+          const newSetRef = await this.createSet(
+            gameRef,
+            userRef,
+            discardsPlay,
+            "Straight",
+            null,
+            setDoc,
+            null
+          );
+          setDoc.ref.update({
+            straight_continued_set_above: newSetRef,
+            straight_continued_set_above_id: newSetRef.id
+          });
+        }
+      } else if (cardCompare === 1) {
+        if (setDoc.data().straight_continued_set_below) {
+          errorMessage = "Set is already continued downward";
+        } else {
+          const newSetRef = await this.createSet(
+            gameRef,
+            userRef,
+            discardsPlay,
+            "Straight",
+            null,
+            null,
+            setDoc
+          );
+          setDoc.ref.update({
+            straight_continued_set_below: newSetRef,
+            straight_continued_set_below_id: newSetRef.id
+          });
+        }
+      } else if (cardCompare === 0) {
+        if (setDoc.data().same_value_continued_set) {
+          errorMessage = "Set is already continued";
+        } else {
+          const newSetRef = await this.createSet(
+            gameRef,
+            userRef,
+            discardsPlay,
+            "Same Value",
+            setDoc,
+            null,
+            null
+          );
+          setDoc.ref.update({
+            same_value_continued_set: newSetRef,
+            same_value_continued_set_id: newSetRef.id
+          });
+        }
+      } else {
+        await this.deleteCollection(
+          gameRef.collection("possible_rummies"),
+          100
+        );
+        //clean up game state
+        await gameRef.update({
+          game_state: gameDoc.data().game_revert_state,
+          game_revert_state: null,
+          rummy_player: null,
+          rummy_index: null,
+          rummy_player_id: null
+        });
+        return `unknown error`;
+      }
+      if (errorMessage !== "") {
+        return errorMessage;
+      }
+      // no error message, was able to play cards
+      // now pick up remaining discard and remove the played
+      const newDiscard = gameDoc
+        .data()
+        .discard.filter(
+          card => [...discardsKeep, ...discardsPlay].indexOf(card) === -1
+        );
+      await gameDoc.ref.update({ dicard: newDiscard });
+      const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
+      userHandDoc.ref.update({
+        cards: [...userHandDoc.data().cards, ...discardsKeep]
+      });
     } else {
       await this.deleteCollection(gameRef.collection("possible_rummies"), 100);
-      return this.pickupDiscard(
+      await this.pickupDiscard(
         userID,
         gameID,
         gameDoc.data().rummy_index,
         true
       );
+      await gameRef.update({
+        game_state: gameDoc.data().game_revert_state,
+        game_revert_state: null,
+        rummy_player: null,
+        rummy_index: null,
+        rummy_player_id: null
+      });
+      return "Success";
     }
   };
 
