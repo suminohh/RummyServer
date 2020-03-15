@@ -592,21 +592,21 @@ module.exports = class RummyDatabase {
       if (possibleSets.length === 0)
         return "Cannot use the card being picked up from discard";
     }
-    // const remainingDiscard = discard.slice(0, discardPickupIndex);
-    // gameDoc.ref.update({ discard: remainingDiscard });
-    // handDoc.ref.update({
-    //   cards: [...handDoc.data().cards, ...pickedUpCards]
-    // });
-    // await this.setDiscardPickupCard(gameDoc, firstPickedUpCard);
-    // await gameDoc.ref.update({
-    //   game_state: GAME_STATE.discardPlay,
-    //   timestamp: admin.firestore.FieldValue.serverTimestamp(),
-    //   ...(await this.getUpdatedCardInHandCount(
-    //     gameDoc,
-    //     userID,
-    //     pickedUpCards.length
-    //   ))
-    // });
+    const remainingDiscard = discard.slice(0, discardPickupIndex);
+    gameDoc.ref.update({ discard: remainingDiscard });
+    handDoc.ref.update({
+      cards: [...handDoc.data().cards, ...pickedUpCards]
+    });
+    await this.setDiscardPickupCard(gameDoc, firstPickedUpCard);
+    await gameDoc.ref.update({
+      game_state: GAME_STATE.discardPlay,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      ...(await this.getUpdatedCardInHandCount(
+        gameDoc,
+        userID,
+        pickedUpCards.length
+      ))
+    });
     return "Success";
   };
 
