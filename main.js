@@ -70,7 +70,7 @@ const discardHandler = (res, userID, gameID, discardCard) => {
   });
 };
 
-const rummyHandler = (res, userID, possibleRummyID) => {
+const rummyHandler = (res, userID, gameID, possibleRummyID) => {
   rd.rummy(userID, gameID, possibleRummyID).then(message => {
     res.write(message);
     res.end();
@@ -109,7 +109,6 @@ const getGameID = headers => {
 const getDiscardPickupIndex = headers => {
   var discardPickupIndex = parseInt(headers["discard_pickup_index"]);
   if (isNaN(discardPickupIndex)) {
-    console.log("here");
     throw new Error("No discard pickup index");
   }
   return discardPickupIndex;
@@ -119,9 +118,7 @@ const getCards = headers => {
   var cards = headers["cards"];
   try {
     var cards = JSON.parse(headers["cards"]);
-    console.log(cards);
   } catch (err) {
-    console.log(err.message);
     throw new Error("No cards to play");
   }
   if (!cards || cards.length < 1) {
@@ -257,7 +254,6 @@ app.post("/playCards", async (req, res) => {
   getUserID(req.headers)
     .then(userID => {
       try {
-        console.log(req.headers);
         const gameID = getGameID(req.headers);
         const cards = getCards(req.headers);
         const continuedSetID = getContinuedSetID(req.headers);
@@ -278,7 +274,6 @@ app.post("/rummy", async (req, res) => {
   getUserID(req.headers)
     .then(userID => {
       try {
-        console.log(req.headers);
         const gameID = getGameID(req.headers);
         const possibleRummyID = getPossibleRummyID(req.headers);
         res.status(200);
