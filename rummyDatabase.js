@@ -68,6 +68,57 @@ module.exports = class RummyDatabase {
       .collection("hands")
       .add({ player: userRef, playerID: userRef.id, cards: [] });
 
+  deleteCollection = (collectionRef, batchSize) => {
+    let query = collectionRef.orderBy("__name__").limit(batchSize);
+
+    return new Promise((resolve, reject) => {
+      this.deleteQueryBatch(query, batchSize, resolve, reject);
+    });
+  };
+
+  deleteQueryBatch = (query, batchSize, resolve, reject) => {
+    query
+      .get()
+      .then(snapshot => {
+        if (snapshot.size == 0) {
+          return 0;
+        }
+        let batch = this.db.batch();
+        snapshot.docs.forEach(doc => {
+          batch.delete(doc.ref);
+        });
+
+        return batch.commit().then(() => {
+          return snapshot.size;
+        });
+      })
+      .then(numDeleted => {
+        if (numDeleted === 0) {
+          resolve();
+          return;
+        }
+
+        process.nextTick(() => {
+          this.deleteQueryBatch(query, batchSize, resolve, reject);
+        });
+      })
+      .catch(reject);
+  };
+
+  createPossibleRummies = async (gameRef, userRef, possibleRummies) => {
+    await this.deleteCollection(gameRef.collection("possible_rummies"), 100);
+    for (let i = 0; i < possibleRummies.length; i += 1) {
+      await gameRef.collection("possible_rummies").add({
+        player: userRef,
+        playerID: userRef.id,
+        setcards: possibleRummies[i][0] || null,
+        setID: possibleRummies[i][1] || null,
+        discards_play: possibleRummies[i][2],
+        discards_keep: possibleRummies[i][3]
+      });
+    }
+  };
+
   getHandDocs = async gameRef => {
     return (await gameRef.collection("hands").get()).docs;
   };
@@ -150,6 +201,13 @@ module.exports = class RummyDatabase {
       .get();
   };
 
+  getPossibleRummyDoc = async (gameRef, possibleRummyID) => {
+    return await gameRef
+      .collection("possible_rummies")
+      .doc(possibleRummyID)
+      .get();
+  };
+
   traverseSets = async (upwards, setDoc, cards) => {
     var setCards = [...cards, ...setDoc.data().cards];
     if (upwards) {
@@ -205,9 +263,7 @@ module.exports = class RummyDatabase {
 
   getDiscardPickupCard = gameDoc => gameDoc.data().discard_pickup_card;
 
-  sequenceFromCards = cards => Deck.sequenceFromCards(cards);
-
-  powerSet = list => {
+  powerSet = (list, filterValid = true) => {
     var set = [],
       listSize = list.length,
       combinationsCount = 1 << listSize;
@@ -216,75 +272,113 @@ module.exports = class RummyDatabase {
       for (var j = 0, combination = []; j < listSize; j++)
         if (i & (1 << j)) combination.push(list[j]);
 
-      if (Deck.potentialTypeOfSet(combination, true)[0]) {
-        set.push(combination);
+      if (filterValid) {
+        // gets [isvalid, type of set [straight, value, wild], cards]
+        let validatedData = Deck.validateSet(combination, true);
+
+        // checks isValid
+        if (validatedData[0]) {
+          // pushes type of set, and cards
+          set.push([validatedData.slice(1)]);
+        }
+      } else {
+        // pushes type of set, and cards
+        set.push(["not validated", combination]);
       }
     }
     return set;
   };
 
-  getPotentialDiscardSetsUsingHand = (handDoc, discardCard) => {
-    const cardsInHandPowerSet = this.powerSet(handDoc.data().cards).map(set => [
-      ...set,
-      discardCard
-    ]);
-    var potentialCardSets = [];
-    for (var i = 0; i < cardsInHandPowerSet.length; i++) {
-      if (Deck.potentialTypeOfSet(cardsInHandPowerSet[i], true)[0]) {
-        potentialCardSets.push(cardsInHandPowerSet[i]);
-      }
-    }
-    return potentialCardSets;
-  };
+  getDiscardUses = (cardsInHand, playedSetDocs, discardCards) => {
+    const discardPowerSet = this.powerSet(
+      discardCards.slice(1),
+      false
+    ).map(set => [set[0], [...set[1], discardCards[0]]]);
+    discardPowerSet.push(["not validated", [discardCards[0]]]);
 
-  canDiscardBeUsed = (handDoc, playedSetDocs, discardCard) => {
-    const potentialSets = this.getPotentialDiscardSetsUsingHand(
-      handDoc,
-      discardCard
-    );
-    for (var i = 0; i < potentialSets.length; i++) {
-      var potentialSet = Deck.potentialTypeOfSet(potentialSets[i], false);
-      if (potentialSet[0]) {
-        if (potentialSet[1] === "Straight") {
-          if (Deck.validateStraight(potentialSets[i])[0]) {
-            return true;
-          }
-        } else {
-          return true;
-        }
-      }
-      for (var j = 0; j < playedSetDocs.length; j++) {
-        const playedCards = playedSetDocs[j].data().cards;
-        potentialSet = Deck.potentialTypeOfSet(
-          [...potentialSets[i], ...playedCards],
-          true
+    const handPowerSet = this.powerSet(cardsInHand, false);
+
+    const playedSets = playedSetDocs.map(setDoc => setDoc.data().cards);
+
+    // [continued set cards, cards from discard, discard to pickup]
+    const rummySets = [];
+
+    // [continued set cards, hand cards, cards from discard]
+    const normalSets = [];
+
+    // try playing just discard cards (rummy)
+    for (let i = 0; i < discardPowerSet.length; i += 1) {
+      let discardCombination = discardPowerSet[i][1];
+
+      let validatedDiscardData = Deck.validateSet(discardCombination, false);
+      if (validatedDiscardData[0]) {
+        const pickupDiscard = discardCards.filter(
+          card => validatedDiscardData[2].indexOf(card) === -1
         );
-        if (potentialSet[0]) {
-          if (potentialSet[1] === "Straight") {
-            if (Deck.validateStraight(potentialSets[i])[0]) {
-              return true;
-            }
-          } else {
-            return true;
+        rummySets.push([[], undefined, validatedDiscardData[2], pickupDiscard]);
+      }
+      // try playing discard cards on a played set (rummy)
+      for (let j = 0; j < playedSets.length; j += 1) {
+        let validatedDiscardAndPlayedData = Deck.validateSet(
+          [...discardCombination, ...playedSets[j]],
+          true,
+          playedSetDocs[j].data().set_type
+        );
+        if (
+          validatedDiscardAndPlayedData[0] &&
+          validatedDiscardAndPlayedData[1] === playedSetDocs[j].data().set_type
+        ) {
+          let discardOnly = validatedDiscardAndPlayedData[2].filter(
+            card => playedSets[j].indexOf(card) === -1
+          );
+          const pickupDiscard = discardCards.filter(
+            card => discardOnly.indexOf(card) === -1
+          );
+          rummySets.push([
+            playedSets[j],
+            playedSetDocs[j].id,
+            discardOnly,
+            pickupDiscard
+          ]);
+        }
+      }
+      // try playing discard cards with player cards
+      for (let j = 0; j < handPowerSet.length; j += 1) {
+        let handCombination = handPowerSet[j][1];
+        let validatedDiscardAndHandData = Deck.validateSet(
+          [...discardCombination, ...handCombination],
+          false
+        );
+        if (validatedDiscardAndHandData[0]) {
+          let discardOnly = validatedDiscardAndHandData[2].filter(
+            card => handCombination.indexOf(card) === -1
+          );
+          normalSets.push([[], handCombination, discardOnly]);
+        }
+
+        // try playing discard cards with player cards and a played set
+        for (let k = 0; k < playedSets.length; k += 1) {
+          let validatedDiscardPlayedAndHandData = Deck.validateSet(
+            [...discardCombination, ...playedSets[k], ...handCombination],
+            true,
+            playedSetDocs[k].data().set_type
+          );
+          if (
+            validatedDiscardPlayedAndHandData[0] &&
+            validatedDiscardPlayedAndHandData[1] ===
+              playedSetDocs[k].data().set_type
+          ) {
+            let discardOnly = validatedDiscardPlayedAndHandData[2].filter(
+              card =>
+                handCombination.indexOf(card) === -1 &&
+                playedSets[k].indexOf(card) === -1
+            );
+            normalSets.push([playedSets[k], handCombination, discardOnly]);
           }
         }
       }
     }
-    return false;
-  };
-
-  canDiscardBeUsedAsRummy = (playedSetDocs, discardCards) => {
-    for (var j = 0; j < playedSetDocs.length; j++) {
-      const playedCards = playedSetDocs[j].data().cards;
-      if (Deck.potentialTypeOfSet([...playedCards, discardCards[0]], true)[0]) {
-        return true;
-      } else if (
-        Deck.potentialTypeOfSet([...discardCards.slice(1), discardCards[0]])
-      ) {
-        return true;
-      }
-    }
-    return false;
+    return [rummySets, normalSets];
   };
 
   getUpdatedCardInHandCount = async (gameDoc, userID, cardUpdate) => {
@@ -336,6 +430,8 @@ module.exports = class RummyDatabase {
     return gameID;
   };
 
+  // TODO:
+  // throw errors rather than good responses
   joinGame = async (userID, gameID) => {
     const userDoc = await this.getUserDoc(userID);
     const userRef = userDoc.ref;
@@ -385,6 +481,9 @@ module.exports = class RummyDatabase {
     });
     return "Success";
   };
+
+  // TODO:
+  // throw errors rather than good responses
   deleteGame = async (userID, gameID) => {
     const userDoc = await this.getUserDoc(userID);
     const userRef = userDoc.ref;
@@ -404,6 +503,8 @@ module.exports = class RummyDatabase {
     }
   };
 
+  // TODO:
+  // throw errors rather than good responses
   pickupDeck = async (userID, gameID) => {
     const userDoc = await this.getUserDoc(userID);
     const gameDoc = await this.getGameDoc(gameID);
@@ -430,53 +531,73 @@ module.exports = class RummyDatabase {
     return "Success";
   };
 
-  pickupDiscard = async (userID, gameID, discardPickupIndex) => {
+  // TODO:
+  // throw errors rather than good responses
+  // fix determining if pickup is okay
+  // start rummy flow if rummy is happening
+  // set rummy player if rummy
+  pickupDiscard = async (
+    userID,
+    gameID,
+    discardPickupIndex,
+    alreadyValidated = false
+  ) => {
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
     const playedSetDocs = await this.getPlayedSetDocs(gameDoc.ref);
     const discard = gameDoc.data().discard;
     const pickedUpCards = discard.slice(discardPickupIndex);
-    const isRummyPickup = this.canDiscardBeUsedAsRummy(
+    const firstPickedUpCard = pickedUpCards[0];
+    const handDoc = await this.getHandDocForUser(gameDoc.ref, userRef);
+
+    const discardUses = this.getDiscardUses(
+      handDoc.data().cards,
       playedSetDocs,
       pickedUpCards
     );
-    // TODO: figure out best way to tackle rummy situation
-    if (!isRummyPickup) {
-      if (!(await this.isPlayersTurn(gameDoc, userID))) {
-        return "Not your turn";
+
+    const possibleRummies = discardUses[0];
+    const possibleSets = discardUses[1];
+
+    // console.log(discardUses);
+    console.log(possibleRummies);
+    console.log(possibleSets);
+
+    if (!alreadyValidated) {
+      if (possibleRummies.length === 0) {
+        if (!(await this.isPlayersTurn(gameDoc, userID))) {
+          return "Not your turn";
+        }
+        if (gameDoc.data().game_state !== GAME_STATE.draw) {
+          return "Cannot draw now";
+        }
+      } else if (gameDoc.data().game_state !== GAME_STATE.rummy) {
+        console.log("rummy");
+        this.createPossibleRummies(gameDoc.ref, userRef, possibleRummies);
+        gameDoc.ref.update({
+          rummy_player: userRef,
+          rummy_player_id: userRef.id,
+          game_state: GAME_STATE.rummy,
+          rummy_index: discardPickupIndex,
+          game_revert_state: gameDoc.data().game_state
+        });
+        if (possibleSets.length > 0) {
+          gameDoc.ref.update({ discard_pickup_card: firstPickedUpCard });
+        }
+        return "Rummy";
+      } else {
+        return "Other player is doing a rummy";
       }
-      if (gameDoc.data().game_state !== GAME_STATE.draw) {
-        return "Cannot draw now";
-      }
-    } else {
-      var handDoc = await this.getHandDocForUser(gameDoc.ref, userRef);
-      console.log("rummy");
-      const remainingDiscard = discard.slice(0, discardPickupIndex);
-      gameDoc.ref.update({ discard: remainingDiscard });
-      handDoc.ref.update({
-        cards: [...handDoc.data().cards, ...pickedUpCards]
-      });
-      await gameDoc.ref.update({
-        game_state: GAME_STATE.rummy,
-        rummy_turn: userRef,
-        rummy_turn_id: userRef.id
-      });
-      return "Rummy";
+
+      if (possibleSets.length === 0)
+        return "Cannot use the card being picked up from discard";
     }
-    var handDoc = await this.getHandDocForUser(gameDoc.ref, userRef);
-    const isDiscardPickupAllowed = this.canDiscardBeUsed(
-      handDoc,
-      playedSetDocs,
-      pickedUpCards[0]
-    );
-    if (!isDiscardPickupAllowed)
-      return "Cannot use the card being picked up from discard";
     const remainingDiscard = discard.slice(0, discardPickupIndex);
     gameDoc.ref.update({ discard: remainingDiscard });
     handDoc.ref.update({
       cards: [...handDoc.data().cards, ...pickedUpCards]
     });
-    await this.setDiscardPickupCard(gameDoc, pickedUpCards[0]);
+    await this.setDiscardPickupCard(gameDoc, firstPickedUpCard);
     await gameDoc.ref.update({
       game_state: GAME_STATE.discardPlay,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
@@ -489,93 +610,91 @@ module.exports = class RummyDatabase {
     return "Success";
   };
 
+  // TODO:
+  // throw errors rather than good responses
+  // work with rummy
+  // remove rummy player if rummy and play happens
+  // update use of potential type of set
+  // FIX THIS MESS
   playCards = async (userID, gameID, cards, continuedSetID) => {
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
-    let rummyPlay = false;
-    if (
-      !(await this.isPlayersTurn(gameDoc, userID)) &&
-      !(gameDoc.data().rummy_turn === userRef)
-    ) {
+    const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
+
+    if (!(await this.isPlayersTurn(gameDoc, userID))) {
       return "Not your turn";
     }
     if (
       gameDoc.data().game_state !== GAME_STATE.play &&
       gameDoc.data().game_state !== GAME_STATE.discardPlay
     ) {
-      if (gameDoc.data().game_state !== GAME_STATE.rummy) {
-        rummyPlay = true;
-      } else {
-        return "Cannot play cards now";
-      }
+      return "Cannot play cards now";
     }
-    const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
+
     if (!this.areCardsInHand(userHandDoc, cards)) {
       return "Card(s) not in your hand";
     }
     var discardPickupCard = await this.getDiscardPickupCard(gameDoc);
     if (discardPickupCard) {
-      if (cards.indexOf(discardPickupCard) != -1) {
-        await this.setDiscardPickupCard(gameDoc, null);
-        await gameRef.update({ game_state: GAME_STATE.play });
-      } else {
+      if (!(cards.indexOf(discardPickupCard) !== -1)) {
         return `Must play the ${discardPickupCard} in a set before any other set`;
       }
     }
-    var orderedCards = [];
-    // TODO: This will fail if <3 cards, which shouldn't always fail- ex playing 1 card off of another set
-    // maybe don't check just the cards unless there isn't a continued set.
-    var potentialSet = Deck.potentialTypeOfSet(cards, !!continuedSetID);
-    if (!potentialSet[0] && !continuedSetID) return potentialSet[1];
-    if (potentialSet[1] == "Straight") {
-      var isValidStraight = Deck.validateStraight(cards);
-      if (!isValidStraight[0]) return "Invalid Straight";
-      orderedCards = isValidStraight[1];
-    } else if (potentialSet[1] == "Wild") {
-      orderedCards = [...cards];
+    var potentialSet = Deck.validateSet(cards, !!continuedSetID);
+    // returns a failure message here
+    if (!potentialSet[0] && !continuedSetID) {
+      return potentialSet[1];
     }
 
-    var allCards = [...cards];
+    var orderedCards = potentialSet[2];
 
-    var setDoc = null;
-    var continuedCards = [];
-    var cardCompare = 0;
+    // if continuing a set, more work must be done
     if (continuedSetID) {
-      setDoc = await this.getSetDoc(gameRef, continuedSetID);
-      continuedCards = setDoc.data().cards;
+      var allCards = [...cards];
+      var setDoc = await this.getSetDoc(gameRef, continuedSetID);
+      var continuedCards = setDoc.data().cards;
+      var cardCompare = 0;
+
+      // Continuation and playing cards set type don't match, return error
       if (
         setDoc.data().set_type !== potentialSet[1] &&
         potentialSet[1] !== "Wild"
       ) {
-        return `Cannot play off of selected set becase it is not a ${potentialSet[1]} set`;
+        return `Cannot play off of selected set because it is not a ${potentialSet[1]} set`;
       }
+
+      // If playing a straight, or "wild" have to validate it can be used on the continued set
       if (potentialSet[1] === "Straight" || potentialSet[1] === "Wild") {
         cardCompare = Deck.compareCards(
           continuedCards[0],
           orderedCards[orderedCards.length - 1]
         );
+        // either -1 or 1 to determine if it will be traversing up or down
         if (cardCompare !== 0) {
           allCards = await this.traverseSets(
             cardCompare === 1,
             setDoc,
             orderedCards
           );
-        } else if (potentialSet[1] !== "Wild") {
-          return `Cannot play off of selected because the straight is invalid`;
+        } else {
+          if (potentialSet[1] !== "Wild") {
+            return `Cannot play off of selected because the straight is invalid`;
+          } else {
+            // cards should be same value
+            allCards = [cards[0], ...continuedCards];
+          }
         }
-        if (potentialSet[1] === "Wild" && cardCompare === 0) {
-          allCards = [cards[0], ...continuedCards];
-        }
-      }
-      var potentialFullSet = Deck.potentialTypeOfSet(allCards);
-      if (!potentialFullSet[0])
-        return `Cards selected from hand are a ${potentialSet[1]}, but cannot be attached to the played set because: ${potentialFullSet[1]}`;
-      if (potentialFullSet[1] == "Straight") {
-        var isValidStraight = Deck.validateStraight(allCards);
-        if (!isValidStraight[0]) return "Invalid Straight";
       }
 
+      var potentialFullSet = Deck.validateSet(allCards);
+
+      // bad full set, return error
+      if (!potentialFullSet[0]) {
+        return `Cards selected from hand are a ${potentialSet[1]}, but cannot be attached to the played set because: ${potentialFullSet[1]}`;
+      }
+
+      // full set is potentially a straight set
       if (potentialFullSet[1] == "Straight") {
         if (cardCompare === -1) {
           if (setDoc.data().straight_continued_set_above) {
@@ -615,6 +734,7 @@ module.exports = class RummyDatabase {
           return `unknown error`;
         }
       } else {
+        // full set is potentially a one of a value set
         if (setDoc.data().same_value_continued_set) {
           return "Set is already continued";
         }
@@ -633,10 +753,11 @@ module.exports = class RummyDatabase {
         });
       }
     } else {
+      // not continuing a set, can just create a valid set
       await this.createSet(
         gameRef,
         userRef,
-        potentialSet[1] == "Straight" ? orderedCards : cards,
+        orderedCards,
         potentialSet[1],
         null,
         null,
@@ -644,6 +765,10 @@ module.exports = class RummyDatabase {
       );
     }
 
+    if (discardPickupCard) {
+      await this.setDiscardPickupCard(gameDoc, null);
+      await gameRef.update({ game_state: GAME_STATE.play });
+    }
     await this.removeCardsFromHand(userHandDoc, cards);
     await gameRef.update({
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
@@ -656,6 +781,179 @@ module.exports = class RummyDatabase {
     return "Success";
   };
 
+  // TODO:
+  // throw errors rather than good responses
+  // play rummy based off of set chosen by user
+  rummy = async (userID, gameID, possibleRummyID) => {
+    const userRef = (await this.getUserDoc(userID)).ref;
+    const gameDoc = await this.getGameDoc(gameID);
+    const gameRef = gameDoc.ref;
+    if (gameDoc.data().game_state !== "rummy") {
+      return "Not a time for rummy";
+    }
+    console.log(gameDoc.data().rummy_player.id);
+    console.log(userRef.id);
+    if (gameDoc.data().rummy_player.id !== userRef.id) {
+      return "Other player is doing a rummy";
+    }
+    if (possibleRummyID) {
+      // TODO: play rummy based off of set chosen by user
+      const rummyDoc = await this.getPossibleRummyDoc(gameRef, possibleRummyID);
+      const discardsPlay = rummyDoc.data().discards_play;
+      const discardsKeep = rummyDoc.data().discards_keep;
+      if (rummyDoc.data().setID !== null) {
+        const setDoc = await this.getSetDoc(gameRef, rummyDoc.data().setID);
+        const cardCompare = Deck.compareCards(
+          setDoc.data().cards[0],
+          discardsPlay[discardsPlay.length - 1]
+        );
+        let errorMessage = "";
+        if (cardCompare === -1) {
+          console.log("continuing up");
+          if (setDoc.data().straight_continued_set_above) {
+            errorMessage = "Set is already continued upward";
+          } else {
+            const newSetRef = await this.createSet(
+              gameRef,
+              userRef,
+              discardsPlay,
+              "Straight",
+              null,
+              setDoc,
+              null
+            );
+            setDoc.ref.update({
+              straight_continued_set_above: newSetRef,
+              straight_continued_set_above_id: newSetRef.id
+            });
+          }
+        } else if (cardCompare === 1) {
+          console.log("continuing down");
+          if (setDoc.data().straight_continued_set_below) {
+            errorMessage = "Set is already continued downward";
+          } else {
+            const newSetRef = await this.createSet(
+              gameRef,
+              userRef,
+              discardsPlay,
+              "Straight",
+              null,
+              null,
+              setDoc
+            );
+            setDoc.ref.update({
+              straight_continued_set_below: newSetRef,
+              straight_continued_set_below_id: newSetRef.id
+            });
+          }
+        } else if (cardCompare === 0) {
+          console.log("continuing horizontal");
+          if (setDoc.data().same_value_continued_set) {
+            errorMessage = "Set is already continued";
+          } else {
+            const newSetRef = await this.createSet(
+              gameRef,
+              userRef,
+              discardsPlay,
+              "Same Value",
+              setDoc,
+              null,
+              null
+            );
+            setDoc.ref.update({
+              same_value_continued_set: newSetRef,
+              same_value_continued_set_id: newSetRef.id
+            });
+          }
+        } else {
+          await this.deleteCollection(
+            gameRef.collection("possible_rummies"),
+            100
+          );
+          //clean up game state
+          await gameRef.update({
+            game_state: gameDoc.data().game_revert_state,
+            game_revert_state: null,
+            rummy_player: null,
+            rummy_index: null,
+            rummy_player_id: null,
+            discard_pickup_card: null
+          });
+          return `unknown error`;
+        }
+        if (errorMessage !== "") {
+          return errorMessage;
+        }
+      } else {
+        const validated = Deck.validateSet(discardsPlay, false);
+        console.log(validated);
+        await this.createSet(
+          gameRef,
+          userRef,
+          discardsPlay,
+          validated[1],
+          null,
+          null,
+          null
+        );
+      }
+      // no error message, was able to play cards
+      // now pick up remaining discard and remove the played
+      console.log("now to clean up");
+      const newDiscard = gameDoc
+        .data()
+        .discard.filter(
+          card => [...discardsKeep, ...discardsPlay].indexOf(card) === -1
+        );
+      await gameDoc.ref.update({
+        discard: newDiscard,
+        discard_pickup_card: null
+      });
+      const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
+      userHandDoc.ref.update({
+        cards: [...userHandDoc.data().cards, ...discardsKeep]
+      });
+      await this.deleteCollection(gameRef.collection("possible_rummies"), 100);
+      //clean up game state
+      await gameRef.update({
+        game_state: gameDoc.data().game_revert_state,
+        game_revert_state: null,
+        rummy_player: null,
+        rummy_index: null,
+        rummy_player_id: null,
+        discard_pickup_card: null
+      });
+      return "Success";
+    } else {
+      await this.deleteCollection(gameRef.collection("possible_rummies"), 100);
+      if (
+        gameDoc.data().turn.id === userID &&
+        gameDoc.data().discard_card != null
+      ) {
+        await this.pickupDiscard(
+          userID,
+          gameID,
+          gameDoc.data().rummy_index,
+          true
+        );
+        await gameDoc.ref.update({ game_state: GAME_STATE.discardPlay });
+      } else {
+        await gameDoc.ref.update({
+          game_state: gameDoc.data().game_revert_state
+        });
+      }
+      await gameRef.update({
+        game_revert_state: null,
+        rummy_player: null,
+        rummy_index: null,
+        rummy_player_id: null
+      });
+      return "Success";
+    }
+  };
+
+  // TODO:
+  // throw errors rather than good responses
   discard = async (userID, gameID, card) => {
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
