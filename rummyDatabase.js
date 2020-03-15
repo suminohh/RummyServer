@@ -258,7 +258,10 @@ module.exports = class RummyDatabase {
   };
 
   setDiscardPickupCard = async (gameDoc, card) => {
-    await gameDoc.ref.update({ discard_pickup_card: card });
+    await gameDoc.ref.update({
+      discard_pickup_card: card,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
   };
 
   getDiscardPickupCard = gameDoc => gameDoc.data().discard_pickup_card;
@@ -449,7 +452,8 @@ module.exports = class RummyDatabase {
     await gameRef.update({
       player2: userRef,
       player2ID: userRef.id,
-      player2Name: userDoc.data().name
+      player2Name: userDoc.data().name,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
     await this.createHand(gameRef, userRef);
     var deckDoc = await this.getDeckDoc(gameRef);
@@ -472,7 +476,8 @@ module.exports = class RummyDatabase {
     gameRef.update({
       discard: [firstDiscard],
       player1NumCards: 7,
-      player2NumCards: 7
+      player2NumCards: 7,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
     await deckDoc.ref.update({ cards_used: 15 });
     await gameRef.update({
@@ -495,7 +500,8 @@ module.exports = class RummyDatabase {
     if (await this.isPlayerInGame(gameDoc, userID)) {
       await gameRef.update({
         game_state: GAME_STATE.forfeit,
-        forfeiter: userRef
+        forfeiter: userRef,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
       });
       return "Success";
     } else {
@@ -579,10 +585,14 @@ module.exports = class RummyDatabase {
           rummy_player_id: userRef.id,
           game_state: GAME_STATE.rummy,
           rummy_index: discardPickupIndex,
-          game_revert_state: gameDoc.data().game_state
+          game_revert_state: gameDoc.data().game_state,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
         });
         if (possibleSets.length > 0) {
-          gameDoc.ref.update({ discard_pickup_card: firstPickedUpCard });
+          gameDoc.ref.update({
+            discard_pickup_card: firstPickedUpCard,
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+          });
         }
         return "Rummy";
       } else {
@@ -621,7 +631,6 @@ module.exports = class RummyDatabase {
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
     const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
-
     if (!(await this.isPlayersTurn(gameDoc, userID))) {
       return "Not your turn";
     }
@@ -641,7 +650,13 @@ module.exports = class RummyDatabase {
         return `Must play the ${discardPickupCard} in a set before any other set`;
       }
     }
-    var potentialSet = Deck.validateSet(cards, !!continuedSetID);
+    var potentialSet;
+    if (!!continuedSetID) {
+      var setDoc = await this.getSetDoc(gameRef, continuedSetID);
+      potentialSet = Deck.validateSet(cards, true, setDoc.data().set_type);
+    } else {
+      potentialSet = Deck.validateSet(cards, false);
+    }
     // returns a failure message here
     if (!potentialSet[0] && !continuedSetID) {
       return potentialSet[1];
@@ -767,7 +782,10 @@ module.exports = class RummyDatabase {
 
     if (discardPickupCard) {
       await this.setDiscardPickupCard(gameDoc, null);
-      await gameRef.update({ game_state: GAME_STATE.play });
+      await gameRef.update({
+        game_state: GAME_STATE.play,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
     }
     await this.removeCardsFromHand(userHandDoc, cards);
     await gameRef.update({
@@ -877,7 +895,8 @@ module.exports = class RummyDatabase {
             rummy_player: null,
             rummy_index: null,
             rummy_player_id: null,
-            discard_pickup_card: null
+            discard_pickup_card: null,
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
           });
           return `unknown error`;
         }
@@ -907,7 +926,8 @@ module.exports = class RummyDatabase {
         );
       await gameDoc.ref.update({
         discard: newDiscard,
-        discard_pickup_card: null
+        discard_pickup_card: null,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
       });
       const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
       userHandDoc.ref.update({
@@ -921,7 +941,8 @@ module.exports = class RummyDatabase {
         rummy_player: null,
         rummy_index: null,
         rummy_player_id: null,
-        discard_pickup_card: null
+        discard_pickup_card: null,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
       });
       return "Success";
     } else {
@@ -936,17 +957,22 @@ module.exports = class RummyDatabase {
           gameDoc.data().rummy_index,
           true
         );
-        await gameDoc.ref.update({ game_state: GAME_STATE.discardPlay });
+        await gameDoc.ref.update({
+          game_state: GAME_STATE.discardPlay,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
       } else {
         await gameDoc.ref.update({
-          game_state: gameDoc.data().game_revert_state
+          game_state: gameDoc.data().game_revert_state,
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
         });
       }
       await gameRef.update({
         game_revert_state: null,
         rummy_player: null,
         rummy_index: null,
-        rummy_player_id: null
+        rummy_player_id: null,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
       });
       return "Success";
     }
