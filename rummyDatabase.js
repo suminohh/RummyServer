@@ -111,8 +111,8 @@ module.exports = class RummyDatabase {
       await gameRef.collection("possible_rummies").add({
         player: userRef,
         playerID: userRef.id,
-        setcards: possibleRummies[i][0],
-        setID: possibleRummies[i][1],
+        setcards: possibleRummies[i][0] || null,
+        setID: possibleRummies[i][1] || null,
         discards_play: possibleRummies[i][2],
         discards_keep: possibleRummies[i][3]
       });
@@ -637,7 +637,7 @@ module.exports = class RummyDatabase {
     }
     var discardPickupCard = await this.getDiscardPickupCard(gameDoc);
     if (discardPickupCard) {
-      if (!cards.indexOf(discardPickupCard) != -1) {
+      if (!(cards.indexOf(discardPickupCard) !== -1)) {
         return `Must play the ${discardPickupCard} in a set before any other set`;
       }
     }
@@ -801,87 +801,101 @@ module.exports = class RummyDatabase {
       const rummyDoc = await this.getPossibleRummyDoc(gameRef, possibleRummyID);
       const discardsPlay = rummyDoc.data().discards_play;
       const discardsKeep = rummyDoc.data().discards_keep;
-      const setDoc = await this.getSetDoc(gameRef, rummyDoc.data().setID);
-      const cardCompare = Deck.compareCards(
-        setDoc.data().cards[0],
-        discardsPlay[discardsPlay.length - 1]
-      );
-      let errorMessage = "";
-      if (cardCompare === -1) {
-        console.log("continuing up");
-        if (setDoc.data().straight_continued_set_above) {
-          errorMessage = "Set is already continued upward";
+      if (rummyDoc.data().setID !== null) {
+        const setDoc = await this.getSetDoc(gameRef, rummyDoc.data().setID);
+        const cardCompare = Deck.compareCards(
+          setDoc.data().cards[0],
+          discardsPlay[discardsPlay.length - 1]
+        );
+        let errorMessage = "";
+        if (cardCompare === -1) {
+          console.log("continuing up");
+          if (setDoc.data().straight_continued_set_above) {
+            errorMessage = "Set is already continued upward";
+          } else {
+            const newSetRef = await this.createSet(
+              gameRef,
+              userRef,
+              discardsPlay,
+              "Straight",
+              null,
+              setDoc,
+              null
+            );
+            setDoc.ref.update({
+              straight_continued_set_above: newSetRef,
+              straight_continued_set_above_id: newSetRef.id
+            });
+          }
+        } else if (cardCompare === 1) {
+          console.log("continuing down");
+          if (setDoc.data().straight_continued_set_below) {
+            errorMessage = "Set is already continued downward";
+          } else {
+            const newSetRef = await this.createSet(
+              gameRef,
+              userRef,
+              discardsPlay,
+              "Straight",
+              null,
+              null,
+              setDoc
+            );
+            setDoc.ref.update({
+              straight_continued_set_below: newSetRef,
+              straight_continued_set_below_id: newSetRef.id
+            });
+          }
+        } else if (cardCompare === 0) {
+          console.log("continuing horizontal");
+          if (setDoc.data().same_value_continued_set) {
+            errorMessage = "Set is already continued";
+          } else {
+            const newSetRef = await this.createSet(
+              gameRef,
+              userRef,
+              discardsPlay,
+              "Same Value",
+              setDoc,
+              null,
+              null
+            );
+            setDoc.ref.update({
+              same_value_continued_set: newSetRef,
+              same_value_continued_set_id: newSetRef.id
+            });
+          }
         } else {
-          const newSetRef = await this.createSet(
-            gameRef,
-            userRef,
-            discardsPlay,
-            "Straight",
-            null,
-            setDoc,
-            null
+          await this.deleteCollection(
+            gameRef.collection("possible_rummies"),
+            100
           );
-          setDoc.ref.update({
-            straight_continued_set_above: newSetRef,
-            straight_continued_set_above_id: newSetRef.id
+          //clean up game state
+          await gameRef.update({
+            game_state: gameDoc.data().game_revert_state,
+            game_revert_state: null,
+            rummy_player: null,
+            rummy_index: null,
+            rummy_player_id: null,
+            discard_pickup_card: null
           });
+          return `unknown error`;
         }
-      } else if (cardCompare === 1) {
-        console.log("continuing down");
-        if (setDoc.data().straight_continued_set_below) {
-          errorMessage = "Set is already continued downward";
-        } else {
-          const newSetRef = await this.createSet(
-            gameRef,
-            userRef,
-            discardsPlay,
-            "Straight",
-            null,
-            null,
-            setDoc
-          );
-          setDoc.ref.update({
-            straight_continued_set_below: newSetRef,
-            straight_continued_set_below_id: newSetRef.id
-          });
-        }
-      } else if (cardCompare === 0) {
-        console.log("continuing horizontal");
-        if (setDoc.data().same_value_continued_set) {
-          errorMessage = "Set is already continued";
-        } else {
-          const newSetRef = await this.createSet(
-            gameRef,
-            userRef,
-            discardsPlay,
-            "Same Value",
-            setDoc,
-            null,
-            null
-          );
-          setDoc.ref.update({
-            same_value_continued_set: newSetRef,
-            same_value_continued_set_id: newSetRef.id
-          });
+        if (errorMessage !== "") {
+          return errorMessage;
         }
       } else {
-        await this.deleteCollection(
-          gameRef.collection("possible_rummies"),
-          100
+        const validated = Deck.validateSet(discardsPlay, false);
+        console.log(validated);
+        await this.createSet(
+          gameRef,
+          userRef,
+          discardsPlay,
+          validated[1],
+          null,
+          null,
+          null
         );
-        //clean up game state
-        await gameRef.update({
-          game_state: gameDoc.data().game_revert_state,
-          game_revert_state: null,
-          rummy_player: null,
-          rummy_index: null,
-          rummy_player_id: null,
-          discard_pickup_card: null
-        });
-        return `unknown error`;
-      }
-      if (errorMessage !== "") {
-        return errorMessage;
       }
       // no error message, was able to play cards
       // now pick up remaining discard and remove the played
