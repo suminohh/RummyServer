@@ -8,6 +8,8 @@ var rd = new RummyDatabase();
 var args = process.argv.slice(2);
 const DEBUG = args.length > 0 && args[0] === "debug";
 
+const PORT = DEBUG ? 3001 : 8080;
+
 const log = message => {
   DEBUG && console.log(message);
 };
@@ -150,7 +152,6 @@ const getDiscardCard = headers => {
 
 const app = express();
 app.use(cors());
-const port = 3001;
 
 app.post("/signUp", async (req, res) => {
   getUserID(req.headers)
@@ -308,6 +309,10 @@ app.post("/discard", async (req, res) => {
     });
 });
 
-app.listen(port, () =>
-  console.log(`Server started at: http://localhost:${port}`)
+app.get("/", (req, res) => {
+  res.send("Hello World!");
+});
+
+app.listen(PORT, () =>
+  console.log(`Server started at: http://localhost:${PORT}`)
 );
