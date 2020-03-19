@@ -668,6 +668,7 @@ module.exports = class RummyDatabase {
     if (continuedSetID) {
       var allCards = [...cards];
       var setDoc = await this.getSetDoc(gameRef, continuedSetID);
+      var isSameUser = setDoc.data().player.id === userID;
       var continuedCards = setDoc.data().cards;
       var cardCompare = 0;
 
@@ -716,36 +717,48 @@ module.exports = class RummyDatabase {
           if (setDoc.data().straight_continued_set_above) {
             return "Set is already continued upward";
           }
-          const newSetRef = await this.createSet(
-            gameRef,
-            userRef,
-            orderedCards,
-            "Straight",
-            null,
-            setDoc,
-            null
-          );
-          setDoc.ref.update({
-            straight_continued_set_above: newSetRef,
-            straight_continued_set_above_id: newSetRef.id
-          });
+          if (!isSameUser) {
+            const newSetRef = await this.createSet(
+              gameRef,
+              userRef,
+              orderedCards,
+              "Straight",
+              null,
+              setDoc,
+              null
+            );
+            setDoc.ref.update({
+              straight_continued_set_above: newSetRef,
+              straight_continued_set_above_id: newSetRef.id
+            });
+          } else {
+            setDoc.ref.update({
+              cards: [...setDoc.data().cards, ...orderedCards]
+            });
+          }
         } else if (cardCompare === 1) {
           if (setDoc.data().straight_continued_set_below) {
             return "Set is already continued downward";
           }
-          const newSetRef = await this.createSet(
-            gameRef,
-            userRef,
-            orderedCards,
-            "Straight",
-            null,
-            null,
-            setDoc
-          );
-          setDoc.ref.update({
-            straight_continued_set_below: newSetRef,
-            straight_continued_set_below_id: newSetRef.id
-          });
+          if (!isSameUser) {
+            const newSetRef = await this.createSet(
+              gameRef,
+              userRef,
+              orderedCards,
+              "Straight",
+              null,
+              null,
+              setDoc
+            );
+            setDoc.ref.update({
+              straight_continued_set_below: newSetRef,
+              straight_continued_set_below_id: newSetRef.id
+            });
+          } else {
+            setDoc.ref.update({
+              cards: [...orderedCards, ...setDoc.data().cards]
+            });
+          }
         } else {
           return `unknown error`;
         }
@@ -754,19 +767,25 @@ module.exports = class RummyDatabase {
         if (setDoc.data().same_value_continued_set) {
           return "Set is already continued";
         }
-        const newSetRef = await this.createSet(
-          gameRef,
-          userRef,
-          cards,
-          "Same Value",
-          setDoc,
-          null,
-          null
-        );
-        setDoc.ref.update({
-          same_value_continued_set: newSetRef,
-          same_value_continued_set_id: newSetRef.id
-        });
+        if (!isSameUser) {
+          const newSetRef = await this.createSet(
+            gameRef,
+            userRef,
+            cards,
+            "Same Value",
+            setDoc,
+            null,
+            null
+          );
+          setDoc.ref.update({
+            same_value_continued_set: newSetRef,
+            same_value_continued_set_id: newSetRef.id
+          });
+        } else {
+          setDoc.ref.update({
+            cards: [...setDoc.data().cards, ...cards]
+          });
+        }
       }
     } else {
       // not continuing a set, can just create a valid set
