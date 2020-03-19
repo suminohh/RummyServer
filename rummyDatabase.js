@@ -159,39 +159,20 @@ module.exports = class RummyDatabase {
     await handDoc.ref.update({ cards: newCardsInHand });
   };
 
-  createSet = async (
-    gameRef,
-    userRef,
-    cards,
-    setType,
-    sameSuitContinuedSetDoc,
-    straightContinuedSetDocBelow,
-    straightContinuedSetDocAbove
-  ) => {
-    return await gameRef.collection("sets").add({
-      player: userRef,
-      player_id: userRef.id,
-      cards: cards,
+  createSet = async (gameRef, userRef, cards, setType) => {
+    let setRef = await gameRef.collection("sets").add({
       set_type: setType,
-      same_value_continued_set: sameSuitContinuedSetDoc
-        ? sameSuitContinuedSetDoc.ref
-        : null,
-      same_value_continued_set_id: sameSuitContinuedSetDoc
-        ? sameSuitContinuedSetDoc.ref.id
-        : null,
-      straight_continued_set_below: straightContinuedSetDocBelow
-        ? straightContinuedSetDocBelow.ref
-        : null,
-      straight_continued_set_below_id: straightContinuedSetDocBelow
-        ? straightContinuedSetDocBelow.ref.id
-        : null,
-      straight_continued_set_above: straightContinuedSetDocAbove
-        ? straightContinuedSetDocAbove.ref
-        : null,
-      straight_continued_set_above_id: straightContinuedSetDocAbove
-        ? straightContinuedSetDocAbove.ref.id
-        : null
+      lower: 0,
+      upper: 0
     });
+    setRef
+      .collection("subsets")
+      .doc("0")
+      .set({ cards: cards, player: userRef });
+  };
+
+  addToSet = async (gameRef, userRef, cards, setID) => {
+    const setDoc = this.getSetDoc(gameRef, setID);
   };
 
   getSetDoc = async (gameRef, setID) => {
