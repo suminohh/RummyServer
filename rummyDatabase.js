@@ -697,13 +697,14 @@ module.exports = class RummyDatabase {
             return `Cannot play off of selected because the straight is invalid`;
           } else {
             // cards should be same value
-            allCards = [cards[0], ...continuedCards];
+            allCards = [...cards, ...continuedCards];
           }
         }
+      } else {
+        allCards = [...cards, ...continuedCards];
       }
 
       var potentialFullSet = Deck.validateSet(allCards);
-
       // bad full set, return error
       if (!potentialFullSet[0]) {
         return `Cards selected from hand are a ${potentialSet[1]}, but cannot be attached to the played set because: ${potentialFullSet[1]}`;
