@@ -53,7 +53,7 @@ module.exports = class Deck {
     this.cardsUsed = 0;
   }
 
-  static validateSet(cards, isContinuing, continueType = undefined) {
+  static validateSet(cards) {
     var cardValues = new Set();
     var cardSuits = new Set();
     var cardsSet = new Set();
@@ -66,9 +66,7 @@ module.exports = class Deck {
       cardSuits.add(cardParts[2]);
     });
 
-    if (cards.length < 3 && !isContinuing)
-      return [false, "Not enough cards", []];
-    if (cards.length === 1 && isContinuing) return [true, "Wild", cards];
+    if (cards.length < 3) return [false, "Not enough cards", []];
     if (fakeCard) return [false, "Invalid suit or value", []];
     if (cardsSet.size != cards.length) return [false, "Duplicate card", []];
     if (
@@ -77,10 +75,7 @@ module.exports = class Deck {
       cards.length <= 13
     ) {
       const isValidArray = this.validateStraight(Array.from(cardsSet));
-      if (
-        isValidArray[0] &&
-        ((isContinuing && continueType === "Straight") || !isContinuing)
-      ) {
+      if (isValidArray[0]) {
         return [true, "Straight", isValidArray[1]];
       }
       return [false, "Random cards", []];
@@ -89,21 +84,20 @@ module.exports = class Deck {
     if (
       cardSuits.size === cards.length &&
       cardValues.size === 1 &&
-      cards.length <= 4 &&
-      ((isContinuing && continueType === "Same Value") || !isContinuing)
+      cards.length <= 4
     )
       return [true, "Same Value", cards];
     return [false, "Random cards", []];
   }
 
-  static orderStraight(cards, aceLast) {
+  static orderCards(cards, aceLast) {
     var orderedCards = [...cards];
     orderedCards.sort((a, b) => this.compareCards(a, b, aceLast));
     return orderedCards;
   }
 
   static validateStraight(cards) {
-    const aceFirstOrderedCards = this.orderStraight(cards, false);
+    const aceFirstOrderedCards = this.orderCards(cards, false);
     var properStraight = true;
     for (var index = 0; index < aceFirstOrderedCards.length - 1; index++) {
       const curCardValPlusOne =
@@ -114,7 +108,7 @@ module.exports = class Deck {
         properStraight = false;
     }
     if (properStraight) return [true, aceFirstOrderedCards];
-    const aceLastOrderedCards = this.orderStraight(cards, true);
+    const aceLastOrderedCards = this.orderCards(cards, true);
     var properStraight = true;
     for (var index = 0; index < aceLastOrderedCards.length - 1; index++) {
       const curCardValPlusOne =
