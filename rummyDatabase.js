@@ -168,8 +168,8 @@ module.exports = class RummyDatabase {
   createSet = async (gameRef, userRef, cards, setType) => {
     let setRef = await gameRef.collection("sets").add({
       set_type: setType,
-      lower: 0,
-      upper: 0
+      lower: 7,
+      upper: 7
     });
     await setRef
       .collection("subsets")
@@ -723,6 +723,7 @@ module.exports = class RummyDatabase {
 
     // if continuing a set add to set
     if (continuedSetID) {
+      console.log("here");
       await this.addToSet(userRef, orderedCards, setDoc);
     } else {
       // not continuing a set, create a new set
