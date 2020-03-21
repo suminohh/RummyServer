@@ -168,12 +168,12 @@ module.exports = class RummyDatabase {
   createSet = async (gameRef, userRef, cards, setType) => {
     let setRef = await gameRef.collection("sets").add({
       set_type: setType,
-      lower: 7,
-      upper: 7
+      lower: 14,
+      upper: 14
     });
     await setRef
       .collection("subsets")
-      .doc("7")
+      .doc("14")
       .set({ cards: cards, player: userRef });
     await setRef.update({ plays: 1 });
   };
