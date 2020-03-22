@@ -331,7 +331,7 @@ module.exports = class RummyDatabase {
 
   getDiscardPickupCard = gameDoc => gameDoc.data().discard_pickup_card;
 
-  powerSet = list => {
+  powerSet = (list, filterValid = false) => {
     var set = [],
       listSize = list.length,
       combinationsCount = 1 << listSize;
@@ -339,19 +339,34 @@ module.exports = class RummyDatabase {
     for (var i = 1; i < combinationsCount; i++) {
       for (var j = 0, combination = []; j < listSize; j++)
         if (i & (1 << j)) combination.push(list[j]);
-      set.push(["not validated", combination]);
+
+      if (filterValid) {
+        // gets [isvalid, type of set [straight, value, wild], cards]
+        let validatedData = Deck.validateSet(combination, true);
+
+        // checks isValid
+        if (validatedData[0]) {
+          // pushes type of set, and cards
+          set.push(validatedData.slice(1));
+        }
+      } else {
+        // pushes type of set, and cards
+        set.push(["not validated", combination]);
+      }
     }
     return set;
   };
 
   getDiscardUses = async (cardsInHand, playedSetDocs, discardCards) => {
-    const discardPowerSet = this.powerSet(discardCards.slice(1)).map(set => [
-      set[0],
-      [...set[1], discardCards[0]]
-    ]);
+    const discardPowerSet = this.powerSet(discardCards.slice(1), true).map(
+      set => {
+        console.log(set);
+        return [set[0], [...set[1], discardCards[0]]];
+      }
+    );
     discardPowerSet.push(["not validated", [discardCards[0]]]);
 
-    const handPowerSet = this.powerSet(cardsInHand);
+    const handPowerSet = this.powerSet(cardsInHand, true);
 
     const playedSets = [];
 
@@ -438,6 +453,10 @@ module.exports = class RummyDatabase {
         }
       }
     }
+    console.log("here");
+    console.log(JSON.stringify(rummySets));
+    console.log(JSON.stringify(normalSets));
+    console.log("done");
     return [rummySets, normalSets];
   };
 
@@ -637,20 +656,19 @@ module.exports = class RummyDatabase {
       } else if (gameDoc.data().game_state !== GAME_STATE.rummy) {
         console.log("rummy");
         this.createPossibleRummies(gameDoc.ref, userRef, possibleRummies);
-        gameDoc.ref.update({
+        const gameUpdateData = {
           rummy_player: userRef,
           rummy_player_id: userRef.id,
           game_state: GAME_STATE.rummy,
           rummy_index: discardPickupIndex,
           game_revert_state: gameDoc.data().game_state,
           timestamp: admin.firestore.FieldValue.serverTimestamp()
-        });
+        };
         if (possibleSets.length > 0) {
-          gameDoc.ref.update({
-            discard_pickup_card: firstPickedUpCard,
-            timestamp: admin.firestore.FieldValue.serverTimestamp()
-          });
+          gameUpdateData.discard_pickup_card = firstPickedUpCard;
+          gameUpdateData.timestamp = admin.firestore.FieldValue.serverTimestamp();
         }
+        gameDoc.ref.update(gameUpdateData);
         return "Rummy";
       } else {
         return "Other player is doing a rummy";

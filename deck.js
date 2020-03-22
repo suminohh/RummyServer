@@ -53,7 +53,7 @@ module.exports = class Deck {
     this.cardsUsed = 0;
   }
 
-  static validateSet(cards) {
+  static validateSet(cards, continuing = false) {
     var cardValues = new Set();
     var cardSuits = new Set();
     var cardsSet = new Set();
@@ -66,9 +66,10 @@ module.exports = class Deck {
       cardSuits.add(cardParts[2]);
     });
 
-    if (cards.length < 3) return [false, "Not enough cards", []];
+    if (cards.length < 3 && !continuing) return [false, "Not enough cards", []];
     if (fakeCard) return [false, "Invalid suit or value", []];
     if (cardsSet.size != cards.length) return [false, "Duplicate card", []];
+    if (cards.length === 1) return [true, "Wild", cards];
     if (
       cardSuits.size === 1 &&
       cardValues.size === cards.length &&
