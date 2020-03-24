@@ -19,11 +19,6 @@ const cards = suits.flatMap(suit => {
   return values.map(value => `${value} of ${suit}`);
 });
 
-const StraightSpades = valuesCycle.map(value => `${value} of ${suits[0]}`);
-const StraightHearts = valuesCycle.map(value => `${value} of ${suits[1]}`);
-const StraightClubs = valuesCycle.map(value => `${value} of ${suits[2]}`);
-const StraightDiamonds = valuesCycle.map(value => `${value} of ${suits[3]}`);
-
 module.exports = class Deck {
   constructor() {
     this.cards = [...cards];
