@@ -358,15 +358,15 @@ module.exports = class RummyDatabase {
   };
 
   getDiscardUses = async (cardsInHand, playedSetDocs, discardCards) => {
-    const discardPowerSet = this.powerSet(discardCards.slice(1), true).map(
-      set => {
-        console.log(set);
-        return [set[0], [...set[1], discardCards[0]]];
-      }
-    );
+    let discardPowerSet = this.powerSet(discardCards.slice(1)).map(set => {
+      console.log(set);
+      return [set[0], [...set[1], discardCards[0]]];
+    });
     discardPowerSet.push(["not validated", [discardCards[0]]]);
 
-    const handPowerSet = this.powerSet(cardsInHand, true);
+    console.log(discardPowerSet);
+
+    const handPowerSet = this.powerSet(cardsInHand);
 
     const playedSets = [];
 
@@ -376,10 +376,10 @@ module.exports = class RummyDatabase {
 
     console.log(playedSets);
 
-    // [continued set cards, cards from discard, discard to pickup]
+    // [continued set cards, continuedSetID, cards from discard, discard to pickup]
     const rummySets = [];
 
-    // [continued set cards, hand cards, cards from discard]
+    // [continued set cards, continuedSetID, hand cards, cards from discard]
     const normalSets = [];
 
     // try playing just discard cards (rummy)
