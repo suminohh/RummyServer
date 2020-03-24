@@ -331,7 +331,7 @@ module.exports = class RummyDatabase {
 
   getDiscardPickupCard = gameDoc => gameDoc.data().discard_pickup_card;
 
-  powerSet = (list, filterValid = false) => {
+  powerSet = (list, filterValid = false, validateStraight = true) => {
     var set = [],
       listSize = list.length,
       combinationsCount = 1 << listSize;
@@ -342,7 +342,11 @@ module.exports = class RummyDatabase {
 
       if (filterValid) {
         // gets [isvalid, type of set [straight, value, wild], cards]
-        let validatedData = Deck.validateSet(combination, true);
+        let validatedData = Deck.validateSet(
+          combination,
+          true,
+          validateStraight
+        );
 
         // checks isValid
         if (validatedData[0]) {
@@ -358,15 +362,17 @@ module.exports = class RummyDatabase {
   };
 
   getDiscardUses = async (cardsInHand, playedSetDocs, discardCards) => {
-    let discardPowerSet = this.powerSet(discardCards.slice(1)).map(set => {
-      console.log(set);
-      return [set[0], [...set[1], discardCards[0]]];
-    });
+    let discardPowerSet = this.powerSet(discardCards.slice(1), true, false).map(
+      set => {
+        return [set[0], [...set[1], discardCards[0]]];
+      }
+    );
+
     discardPowerSet.push(["not validated", [discardCards[0]]]);
 
     console.log(discardPowerSet);
 
-    const handPowerSet = this.powerSet(cardsInHand);
+    const handPowerSet = this.powerSet(cardsInHand, true, false);
 
     const playedSets = [];
 
@@ -453,7 +459,7 @@ module.exports = class RummyDatabase {
         }
       }
     }
-    console.log("here");
+    console.log("printing possible discard uses");
     console.log(JSON.stringify(rummySets));
     console.log(JSON.stringify(normalSets));
     console.log("done");

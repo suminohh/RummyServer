@@ -19,6 +19,11 @@ const cards = suits.flatMap(suit => {
   return values.map(value => `${value} of ${suit}`);
 });
 
+const StraightSpades = valuesCycle.map(value => `${value} of ${suits[0]}`);
+const StraightHearts = valuesCycle.map(value => `${value} of ${suits[1]}`);
+const StraightClubs = valuesCycle.map(value => `${value} of ${suits[2]}`);
+const StraightDiamonds = valuesCycle.map(value => `${value} of ${suits[3]}`);
+
 module.exports = class Deck {
   constructor() {
     this.cards = [...cards];
@@ -53,7 +58,7 @@ module.exports = class Deck {
     this.cardsUsed = 0;
   }
 
-  static validateSet(cards, continuing = false) {
+  static validateSet(cards, continuing = false, validateStraight = true) {
     var cardValues = new Set();
     var cardSuits = new Set();
     var cardsSet = new Set();
@@ -75,11 +80,14 @@ module.exports = class Deck {
       cardValues.size === cards.length &&
       cards.length <= 13
     ) {
-      const isValidArray = this.validateStraight(Array.from(cardsSet));
-      if (isValidArray[0]) {
-        return [true, "Straight", isValidArray[1]];
+      if (validateStraight) {
+        const isValidArray = this.validateStraight(Array.from(cardsSet));
+        if (isValidArray[0]) {
+          return [true, "Straight", isValidArray[1]];
+        }
+        return [false, "Random cards", []];
       }
-      return [false, "Random cards", []];
+      return [true, "Straight", cards];
     }
 
     if (
