@@ -703,6 +703,39 @@ module.exports = class RummyDatabase {
 
   // TODO:
   // throw errors rather than good responses
+  // check whether drawing a card while reordering hand may break game
+  reorderCards = async (userID, gameID, cards) => {
+    const userRef = (await this.getUserDoc(userID)).ref;
+    const gameDoc = await this.getGameDoc(gameID);
+    const gameRef = gameDoc.ref;
+    const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
+
+    var cardValues = new Set();
+    var cardSuits = new Set();
+    var cardsSet = new Set();
+    var fakeCard = false;
+    cards.forEach(card => {
+      const cardParts = card.split(" ");
+      if (!Deck.isCard(card)) fakeCard = true;
+      cardsSet.add(card);
+      cardValues.add(cardParts[0]);
+      cardSuits.add(cardParts[2]);
+    });
+    if (fakeCard) return "Invalid suit or value";
+    if (cardsSet.size != cards.length) return "Duplicate card";
+    let currentCards = userHandDoc.data().cards;
+    for (let i = 0; i < cards.length; i += 1) {
+      if (currentCards.indexOf(cards[i]) === -1) {
+        return "Card not found in hand";
+      }
+    }
+
+    await userHandDoc.ref.update({ cards: cards });
+    return "Success";
+  };
+
+  // TODO:
+  // throw errors rather than good responses
   playCards = async (userID, gameID, cards, continuedSetID) => {
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);

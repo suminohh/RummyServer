@@ -65,6 +65,12 @@ const playCardsHandler = (res, userID, gameID, cards, continuedSetID) => {
     res.end();
   });
 };
+const reorderCardsHandler = (res, userID, gameID, cards) => {
+  rd.reorderCards(userID, gameID, cards).then(message => {
+    res.write(message);
+    res.end();
+  });
+};
 const discardHandler = (res, userID, gameID, discardCard) => {
   rd.discard(userID, gameID, discardCard).then(message => {
     res.write(message);
@@ -260,6 +266,25 @@ app.post("/playCards", async (req, res) => {
         const continuedSetID = getContinuedSetID(req.headers);
         res.status(200);
         playCardsHandler(res, userID, gameID, cards, continuedSetID);
+      } catch (err) {
+        res.status(400);
+        res.send(err.message);
+      }
+    })
+    .catch(err => {
+      res.status(400);
+      res.send(err.message);
+    });
+});
+
+app.post("/reorderHand", async (req, res) => {
+  getUserID(req.headers)
+    .then(userID => {
+      try {
+        const gameID = getGameID(req.headers);
+        const cards = getCards(req.headers);
+        res.status(200);
+        reorderCardsHandler(res, userID, gameID, cards);
       } catch (err) {
         res.status(400);
         res.send(err.message);
