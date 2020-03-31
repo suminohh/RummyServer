@@ -373,7 +373,9 @@ module.exports = class RummyDatabase {
 
     console.log(discardPowerSet);
 
-    const handPowerSet = this.powerSet(cardsInHand, true, false);
+    const handPowerSet = this.powerSet(cardsInHand, true, false).filter(
+      set => set[1].length < cardsInHand.length
+    );
 
     const playedSets = [];
 
@@ -386,8 +388,11 @@ module.exports = class RummyDatabase {
     // [continued set cards, continuedSetID, cards from discard, discard to pickup]
     const rummySets = [];
 
-    // [continued set cards, continuedSetID, hand cards, cards from discard]
+    // [continued set cards, hand cards, cards from discard]
     const normalSets = [];
+
+    let playFromHand = false;
+    let playFromSet = false;
 
     // try playing just discard cards (rummy)
     for (let i = 0; i < discardPowerSet.length; i += 1) {
@@ -427,35 +432,43 @@ module.exports = class RummyDatabase {
       // try playing discard cards with player cards
       for (let j = 0; j < handPowerSet.length; j += 1) {
         let handCombination = handPowerSet[j][1];
-        let validatedDiscardAndHandData = Deck.validateSet([
-          ...discardCombination,
-          ...handCombination
-        ]);
-        if (validatedDiscardAndHandData[0]) {
-          let discardOnly = validatedDiscardAndHandData[2].filter(
-            card => handCombination.indexOf(card) === -1
-          );
-          normalSets.push([[], handCombination, discardOnly]);
-        }
-
-        // try playing discard cards with player cards and a played set
-        for (let k = 0; k < playedSets.length; k += 1) {
-          let validatedDiscardPlayedAndHandData = Deck.validateSet([
+        const leftOverCards =
+          cardsInHand.length -
+          handCombination.length +
+          (discardCards.length - discardCombination.length);
+        if (leftOverCards !== 0) {
+          let validatedDiscardAndHandData = Deck.validateSet([
             ...discardCombination,
-            ...playedSets[k],
             ...handCombination
           ]);
-          if (
-            validatedDiscardPlayedAndHandData[0] &&
-            validatedDiscardPlayedAndHandData[1] ===
-              playedSetDocs[k].data().set_type
-          ) {
-            let discardOnly = validatedDiscardPlayedAndHandData[2].filter(
-              card =>
-                handCombination.indexOf(card) === -1 &&
-                playedSets[k].indexOf(card) === -1
+          if (validatedDiscardAndHandData[0]) {
+            let discardOnly = validatedDiscardAndHandData[2].filter(
+              card => handCombination.indexOf(card) === -1
             );
-            normalSets.push([playedSets[k], handCombination, discardOnly]);
+            normalSets.push([[], handCombination, discardOnly]);
+            playFromHand = true;
+          }
+
+          // try playing discard cards with player cards and a played set
+          for (let k = 0; k < playedSets.length; k += 1) {
+            let validatedDiscardPlayedAndHandData = Deck.validateSet([
+              ...discardCombination,
+              ...playedSets[k],
+              ...handCombination
+            ]);
+            if (
+              validatedDiscardPlayedAndHandData[0] &&
+              validatedDiscardPlayedAndHandData[1] ===
+                playedSetDocs[k].data().set_type
+            ) {
+              let discardOnly = validatedDiscardPlayedAndHandData[2].filter(
+                card =>
+                  handCombination.indexOf(card) === -1 &&
+                  playedSets[k].indexOf(card) === -1
+              );
+              normalSets.push([playedSets[k], handCombination, discardOnly]);
+              playFromSet = true;
+            }
           }
         }
       }
@@ -464,7 +477,7 @@ module.exports = class RummyDatabase {
     console.log(JSON.stringify(rummySets));
     console.log(JSON.stringify(normalSets));
     console.log("done");
-    return [rummySets, normalSets];
+    return [rummySets, normalSets, playFromHand, playFromSet];
   };
 
   getUpdatedCardInHandCount = async (gameDoc, userID, cardUpdate) => {
@@ -505,6 +518,8 @@ module.exports = class RummyDatabase {
       player1: userRef,
       player1ID: userRef.id,
       player1Name: userDoc.data().name,
+      player1CanContinueSet: false,
+      player2CanContinueSet: false,
       turn: userRef,
       game_state: GAME_STATE.setup,
       discard_pickup_card: null,
@@ -643,6 +658,7 @@ module.exports = class RummyDatabase {
     const pickedUpCards = discard.slice(discardPickupIndex);
     const firstPickedUpCard = pickedUpCards[0];
     const handDoc = await this.getHandDocForUser(gameDoc.ref, userRef);
+    const isP1 = gameDoc.player1ID === userRef.id;
 
     const discardUses = await this.getDiscardUses(
       handDoc.data().cards,
@@ -652,6 +668,8 @@ module.exports = class RummyDatabase {
 
     const possibleRummies = discardUses[0];
     const possibleSets = discardUses[1];
+    const playFromHand = discardUses[2];
+    const playFromSet = discardUses[3];
 
     // console.log(discardUses);
     console.log(possibleRummies);
@@ -688,6 +706,18 @@ module.exports = class RummyDatabase {
 
       if (possibleSets.length === 0)
         return "Cannot use the card being picked up from discard";
+
+      console.log(playFromHand);
+      console.log(playFromSet);
+      console.log(isP1);
+
+      if (!playFromHand && playFromSet)
+        if (
+          (isP1 && !gameDoc.data().player1CanContinueSet) ||
+          (!isP1 && !gameDoc.data().player2CanContinueSet)
+        ) {
+          return "Not allowed to play off of other player's set until you've played your own";
+        }
     }
     const remainingDiscard = discard.slice(0, discardPickupIndex);
     await gameDoc.ref.update({ discard: remainingDiscard });
@@ -748,6 +778,8 @@ module.exports = class RummyDatabase {
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
     const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
+    const isP1 = gameDoc.player1ID === userRef.id;
+
     if (!(await this.isPlayersTurn(gameDoc, userID))) {
       return "Not your turn";
     }
@@ -760,6 +792,9 @@ module.exports = class RummyDatabase {
 
     if (!this.areCardsInHand(userHandDoc, cards)) {
       return "Card(s) not in your hand";
+    }
+    if (cards.length === userHandDoc.data().cards.length) {
+      return "Cannot play a set if you can't discard afterwards";
     }
     var discardPickupCard = await this.getDiscardPickupCard(gameDoc);
     if (discardPickupCard && !(cards.indexOf(discardPickupCard) !== -1)) {
@@ -785,15 +820,26 @@ module.exports = class RummyDatabase {
       return potentialSet[1];
     }
 
+    const continueData = {};
     // if continuing a set add to set
     if (continuedSetID) {
-      console.log("here");
+      if (
+        (isP1 && !gameDoc.data().player1CanContinueSet) ||
+        (!isP1 && !gameDoc.data().player2CanContinueSet)
+      ) {
+        return "Not allowed to play off of other player's set until you've played your own";
+      }
       await this.addToSet(userRef, orderedCards, setDoc);
     } else {
       // not continuing a set, create a new set
+      if (isP1) {
+        continueData["player1CanContinueSet"] = true;
+      } else {
+        continueData["player2CanContinueSet"] = true;
+      }
       await this.createSet(gameRef, userRef, orderedCards, potentialSet[1]);
     }
-
+    console.log(continueData);
     if (discardPickupCard) {
       await this.setDiscardPickupCard(gameDoc, null);
       await gameRef.update({
@@ -808,7 +854,8 @@ module.exports = class RummyDatabase {
         gameDoc,
         userID,
         updatedCardCount
-      ))
+      )),
+      ...continueData
     });
     return "Success";
   };
