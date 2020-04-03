@@ -144,4 +144,19 @@ module.exports = class Deck {
   static isCard(potentialCard) {
     return cards.indexOf(potentialCard) > -1;
   }
+
+  static pointValue(card) {
+    const cardParts = card.split(" ");
+    switch (cardParts[0]) {
+      case "Ace":
+        return 15;
+      case "10":
+      case "Jack":
+      case "Queen":
+      case "King":
+        return 10;
+      default:
+        return 5;
+    }
+  }
 };

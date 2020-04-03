@@ -274,24 +274,35 @@ module.exports = class RummyDatabase {
       .get();
   };
 
-  traverseSets = async (upwards, setDoc, cards) => {
-    var setCards = [...cards, ...setDoc.data().cards];
-    if (upwards) {
-      if (setDoc.data().straight_continued_set_above) {
-        const newSetDoc = await setDoc
-          .data()
-          .straight_continued_set_above.get();
-        return await this.traverseSets(upwards, newSetDoc, setCards);
-      }
-    } else {
-      if (setDoc.data().straight_continued_set_below) {
-        const newSetDoc = await setDoc
-          .data()
-          .straight_continued_set_below.get();
-        return await this.traverseSets(upwards, newSetDoc, setCards);
-      }
-    }
-    return setCards;
+  countPointsPlayed = async (players, playedSetDocs) => {
+    const playedPoints = {};
+    players.forEach(player => (playedPoints[player] = 0));
+    await this.asyncForEach(playedSetDocs, async setDoc => {
+      const subsetsSnapshot = await setDoc.ref.collection("subsets").get();
+      subsetsSnapshot.docs.forEach(doc => {
+        doc.data().cards.forEach(card => {
+          console.log(card);
+          console.log(Deck.pointValue(card));
+          playedPoints[doc.data().player.id] += Deck.pointValue(card);
+        });
+      });
+    });
+    console.log(playedPoints);
+    return playedPoints;
+  };
+
+  countPointsInHand = async (players, gameRef) => {
+    const handPoints = {};
+    await this.asyncForEach(players, async playerRef => {
+      handPoints[playerRef.id] = 0;
+      const cards = (await this.getHandDocForUser(gameRef, players[0])).data()
+        .cards;
+      cards.forEach(card => {
+        handPoints[playerRef.id] += Deck.pointValue(card);
+      });
+    });
+    console.log(handPoints);
+    return handPoints;
   };
 
   isPlayersTurn = async (gameDoc, userID) => {
@@ -658,7 +669,7 @@ module.exports = class RummyDatabase {
     const pickedUpCards = discard.slice(discardPickupIndex);
     const firstPickedUpCard = pickedUpCards[0];
     const handDoc = await this.getHandDocForUser(gameDoc.ref, userRef);
-    const isP1 = gameDoc.player1ID === userRef.id;
+    const isP1 = gameDoc.data().player1ID === userRef.id;
 
     const discardUses = await this.getDiscardUses(
       handDoc.data().cards,
@@ -778,7 +789,7 @@ module.exports = class RummyDatabase {
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
     const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
-    const isP1 = gameDoc.player1ID === userRef.id;
+    const isP1 = gameDoc.data().player1ID === userRef.id;
 
     if (!(await this.isPlayersTurn(gameDoc, userID))) {
       return "Not your turn";
@@ -979,20 +990,53 @@ module.exports = class RummyDatabase {
     const updatedCardCount = await this.removeCardsFromHand(userHandDoc, [
       card
     ]);
-    const newDiscardPile = [...gameDoc.data().discard, card];
-    var newTurn = (await this.isPlayer1Turn(gameDoc))
-      ? gameDoc.data().player2
-      : gameDoc.data().player1;
+    const updatedGameState = {};
+    const pointsAndWinner = {};
+    // game over
+    if (updatedCardCount === 0) {
+      const playedSetDocs = await this.getPlayedSetDocs(gameDoc.ref);
+      const player1 = gameDoc.data().player1;
+      const player2 = gameDoc.data().player2;
+      const pointsPlayed = await this.countPointsPlayed(
+        [player1.id, player2.id],
+        playedSetDocs
+      );
+      const pointsLost = await this.countPointsInHand(
+        [player1, player2],
+        gameRef
+      );
+      pointsAndWinner["player1HandPoints"] = pointsLost[player1.id];
+      pointsAndWinner["player2HandPoints"] = pointsLost[player2.id];
+      pointsAndWinner["player1Points"] =
+        pointsPlayed[player1.id] - pointsLost[player1.id];
+      pointsAndWinner["player2Points"] =
+        pointsPlayed[player2.id] - pointsLost[player2.id];
+      const pointsDiff =
+        pointsAndWinner["player1Points"] - pointsAndWinner["player2Points"];
+      if (pointsDiff > 0) {
+        pointsAndWinner["winner"] = player1.id;
+      } else if (pointsDiff < 0) {
+        pointsAndWinner["winner"] = player2.id;
+      } else {
+        pointsAndWinner["winner"] = "tie";
+      }
+      updatedGameState["game_state"] = GAME_STATE.done;
+    } else {
+      updatedGameState["game_state"] = GAME_STATE.draw;
+      updatedGameState["discard"] = [...gameDoc.data().discard, card];
+      updatedGameState["turn"] = (await this.isPlayer1Turn(gameDoc))
+        ? gameDoc.data().player2
+        : gameDoc.data().player1;
+    }
     await gameRef.update({
-      game_state: GAME_STATE.draw,
-      turn: newTurn,
-      discard: newDiscardPile,
+      ...updatedGameState,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
       ...(await this.getUpdatedCardInHandCount(
         gameDoc,
         userID,
         updatedCardCount
-      ))
+      )),
+      ...pointsAndWinner
     });
     return "Success";
   };
