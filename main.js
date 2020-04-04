@@ -335,7 +335,7 @@ app.post("/discard", async (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  res.send("Version: 0.1.1");
+  res.send("Version: 0.1.2");
 });
 
 app.listen(PORT, () =>

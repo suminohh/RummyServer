@@ -1028,7 +1028,7 @@ module.exports = class RummyDatabase {
       await this.deleteCollection(gameRef.collection("possible_rummies"), 100);
       if (
         gameDoc.data().turn.id === userID &&
-        gameDoc.data().discard_card != null
+        gameDoc.data().discard_pickup_card != null
       ) {
         await this.pickupDiscard(
           userID,
