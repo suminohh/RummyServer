@@ -287,6 +287,7 @@ module.exports = class RummyDatabase {
         });
       });
     });
+    console.log("Played Points");
     console.log(playedPoints);
     return playedPoints;
   };
@@ -295,12 +296,13 @@ module.exports = class RummyDatabase {
     const handPoints = {};
     await this.asyncForEach(players, async playerRef => {
       handPoints[playerRef.id] = 0;
-      const cards = (await this.getHandDocForUser(gameRef, players[0])).data()
+      const cards = (await this.getHandDocForUser(gameRef, playerRef)).data()
         .cards;
       cards.forEach(card => {
         handPoints[playerRef.id] += Deck.pointValue(card);
       });
     });
+    console.log("Hand Points");
     console.log(handPoints);
     return handPoints;
   };
