@@ -622,17 +622,23 @@ module.exports = class RummyDatabase {
     const userDoc = await this.getUserDoc(userID);
     const gameDoc = await this.getGameDoc(gameID);
     const deckDoc = await this.getDeckDoc(gameDoc.ref);
+    var handDoc = await this.getHandDocForUser(gameDoc.ref, userDoc.ref);
     if (!(await this.isPlayersTurn(gameDoc, userID))) {
+      handDoc.ref.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
       return "Not your turn";
     }
     if (gameDoc.data().game_state !== GAME_STATE.draw) {
+      handDoc.ref.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
       return "Cannot draw now";
     }
     var cards = deckDoc.data().cards;
     var cardsUsed = deckDoc.data().cards_used;
     const pickedUpCard = cards[cardsUsed];
     await deckDoc.ref.update({ cards_used: cardsUsed + 1 });
-    var handDoc = await this.getHandDocForUser(gameDoc.ref, userDoc.ref);
     const updatedCardCount = handDoc.data().cards.length + 1;
     await handDoc.ref.update({
       cards: [...handDoc.data().cards, pickedUpCard]
@@ -687,9 +693,21 @@ module.exports = class RummyDatabase {
     if (!alreadyValidated) {
       if (possibleRummies.length === 0) {
         if (!(await this.isPlayersTurn(gameDoc, userID))) {
+          handDoc.ref.update({
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+          });
+          gameDoc.ref.update({
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+          });
           return "Not your turn";
         }
         if (gameDoc.data().game_state !== GAME_STATE.draw) {
+          handDoc.ref.update({
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+          });
+          gameDoc.ref.update({
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+          });
           return "Cannot draw now";
         }
       } else if (gameDoc.data().game_state !== GAME_STATE.rummy) {
@@ -708,13 +726,29 @@ module.exports = class RummyDatabase {
           gameUpdateData.timestamp = admin.firestore.FieldValue.serverTimestamp();
         }
         gameDoc.ref.update(gameUpdateData);
+        handDoc.ref.update({
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
         return "Rummy";
       } else {
+        handDoc.ref.update({
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+        gameDoc.ref.update({
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
         return "Other player is doing a rummy";
       }
 
-      if (possibleSets.length === 0)
+      if (possibleSets.length === 0) {
+        handDoc.ref.update({
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+        gameDoc.ref.update({
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
         return "Cannot use the card being picked up from discard";
+      }
 
       console.log(playFromHand);
       console.log(playFromSet);
@@ -725,6 +759,9 @@ module.exports = class RummyDatabase {
           (isP1 && !gameDoc.data().player1CanContinueSet) ||
           (!isP1 && !gameDoc.data().player2CanContinueSet)
         ) {
+          handDoc.ref.update({
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+          });
           return "Not allowed to play off of other player's set until you've played your own";
         }
     }
@@ -767,11 +804,24 @@ module.exports = class RummyDatabase {
       cardValues.add(cardParts[0]);
       cardSuits.add(cardParts[2]);
     });
-    if (fakeCard) return "Invalid suit or value";
-    if (cardsSet.size != cards.length) return "Duplicate card";
+    if (fakeCard) {
+      userHandDoc.ref.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return "Invalid suit or value";
+    }
+    if (cardsSet.size != cards.length) {
+      userHandDoc.ref.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return "Duplicate card";
+    }
     let currentCards = userHandDoc.data().cards;
     for (let i = 0; i < cards.length; i += 1) {
       if (currentCards.indexOf(cards[i]) === -1) {
+        userHandDoc.ref.update({
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
         return "Card not found in hand";
       }
     }
@@ -790,23 +840,53 @@ module.exports = class RummyDatabase {
     const isP1 = gameDoc.data().player1ID === userRef.id;
 
     if (!(await this.isPlayersTurn(gameDoc, userID))) {
+      userHandDoc.ref.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+      gameRef.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
       return "Not your turn";
     }
     if (
       gameDoc.data().game_state !== GAME_STATE.play &&
       gameDoc.data().game_state !== GAME_STATE.discardPlay
     ) {
+      userHandDoc.ref.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+      gameRef.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
       return "Cannot play cards now";
     }
 
     if (!this.areCardsInHand(userHandDoc, cards)) {
+      userHandDoc.ref.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+      gameRef.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
       return "Card(s) not in your hand";
     }
     if (cards.length === userHandDoc.data().cards.length) {
+      userHandDoc.ref.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+      gameRef.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
       return "Cannot play a set if you can't discard afterwards";
     }
     var discardPickupCard = await this.getDiscardPickupCard(gameDoc);
     if (discardPickupCard && !(cards.indexOf(discardPickupCard) !== -1)) {
+      userHandDoc.ref.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+      gameRef.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
       return `Must play the ${discardPickupCard} in a set before any other set`;
     }
 
@@ -826,6 +906,12 @@ module.exports = class RummyDatabase {
     }
     // returns a failure message here
     if (!potentialSet[0]) {
+      userHandDoc.ref.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+      gameRef.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
       return potentialSet[1];
     }
 
@@ -836,6 +922,12 @@ module.exports = class RummyDatabase {
         (isP1 && !gameDoc.data().player1CanContinueSet) ||
         (!isP1 && !gameDoc.data().player2CanContinueSet)
       ) {
+        userHandDoc.ref.update({
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+        gameRef.update({
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
         return "Not allowed to play off of other player's set until you've played your own";
       }
       await this.addToSet(userRef, orderedCards, setDoc);
@@ -971,18 +1063,42 @@ module.exports = class RummyDatabase {
     const userRef = (await this.getUserDoc(userID)).ref;
     const gameDoc = await this.getGameDoc(gameID);
     const gameRef = gameDoc.ref;
+    const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
     if (!(await this.isPlayersTurn(gameDoc, userID))) {
+      userHandDoc.ref.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+      gameRef.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
       return "Not your turn";
     }
     if (gameDoc.data().game_state !== GAME_STATE.play) {
       if (gameDoc.data().game_state === GAME_STATE.discardPlay) {
         var discardPickupCard = await this.getDiscardPickupCard(gameDoc);
+        userHandDoc.ref.update({
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
+        gameRef.update({
+          timestamp: admin.firestore.FieldValue.serverTimestamp()
+        });
         return `Must play the ${discardPickupCard} before discarding`;
       }
+      userHandDoc.ref.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+      gameRef.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
       return "Cannot discard now";
     }
-    const userHandDoc = await this.getHandDocForUser(gameRef, userRef);
     if (!this.areCardsInHand(userHandDoc, [card])) {
+      userHandDoc.ref.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+      gameRef.update({
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
       return "Card is not in your hand";
     }
     const updatedCardCount = await this.removeCardsFromHand(userHandDoc, [
