@@ -384,9 +384,7 @@ module.exports = class RummyDatabase {
 
     console.log(discardPowerSet);
 
-    const handPowerSet = this.powerSet(cardsInHand, true, false).filter(
-      set => set[1].length < cardsInHand.length
-    );
+    const handPowerSet = this.powerSet(cardsInHand, true, false);
 
     const playedSets = [];
 
