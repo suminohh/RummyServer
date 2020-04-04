@@ -714,7 +714,7 @@ module.exports = class RummyDatabase {
         }
       } else if (gameDoc.data().game_state !== GAME_STATE.rummy) {
         console.log("rummy");
-        this.createPossibleRummies(gameDoc.ref, userRef, possibleRummies);
+        await this.createPossibleRummies(gameDoc.ref, userRef, possibleRummies);
         const gameUpdateData = {
           rummy_player: userRef,
           rummy_player_id: userRef.id,
