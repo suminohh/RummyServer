@@ -2,8 +2,8 @@ const Deck = require("./deck");
 var admin = require("firebase-admin");
 
 var serviceAccount = require(process.env.NODE_ENV === "dev"
-  ? "./rummyHouse_creds_dev.json"
-  : "./rummyHouse_creds.json");
+  ? "./creds/rummyHouse_creds_dev.json"
+  : "./creds/rummyHouse_creds.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
